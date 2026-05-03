@@ -25,6 +25,7 @@
     <modules>
         <module>netty-codec-webtransport</module>
         <module>netty-codec-webtransport-example</module>
+        <module>netty-codec-webtransport-tests</module>
     </modules>
 
     <properties>

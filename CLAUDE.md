@@ -23,6 +23,11 @@ the same commit.**
 - [`netty-codec-webtransport-example/`](netty-codec-webtransport-example/) —
   runnable demos. Currently hosts an `EchoServer` that exercises the new API
   (session channel, per-stream child channels, datagram frames).
+- [`netty-codec-webtransport-tests/`](netty-codec-webtransport-tests/) —
+  browser interop tests driven by Playwright Java + Chromium. Skipped by
+  default; activate with `mvn -P integration verify`. Currently the
+  handshake fails on the JS side (`Opening handshake failed`); the harness
+  is in place and the wire-level fix is the next concrete task.
 
 ## Architecture in one paragraph
 
@@ -102,12 +107,21 @@ requirements, and the no-wrapper decision live in [README.md](README.md) and
 
 ## What's next
 
-See [docs/roadmap.md](docs/roadmap.md). Phases 1-5 are implemented; the
-next priorities are Phase 6 (real flow-control enforcement; capsules are
+See [docs/roadmap.md](docs/roadmap.md). Phases 1-5 and 7 are implemented.
+Phase 8 (browser interop) has its harness in `netty-codec-webtransport-tests`
+but the actual handshake is not yet succeeding — that is the most concrete
+next task. After that: Phase 6 (real flow-control enforcement; capsules are
 parsed and stored on `DefaultWebTransportSession` but limits aren't yet
-enforced on outbound streams/data) and Phase 8 (browser interop). Phase 7
-(echo example) has effectively landed via the example module. The Java
-client (Phase 9) is still untouched.
+enforced on outbound streams/data). Phase 9 (Java client) is still
+untouched.
+
+To debug the Phase 8 handshake failure, run with the headed flag and open
+DevTools → Network → look at the WebTransport row for the actual rejection
+reason; also check `chrome://net-internals/#quic`:
+
+```sh
+mvn -B -P integration -Dpw.headed=true -Dpw.devtools=true -pl netty-codec-webtransport-tests test
+```
 
 ## What NOT to do
 

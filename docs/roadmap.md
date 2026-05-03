@@ -84,7 +84,9 @@ This is what we point a browser at in Phase 8.
 Bring up `EchoServer`, connect from Chrome:
 
 ```js
-const wt = new WebTransport('https://localhost:4433/echo');
+const wt = new WebTransport('https://localhost:4433/echo', {
+    serverCertificateHashes: [{ algorithm: 'sha-256', value: certSha256 }]
+});
 await wt.ready;
 const writer = (await wt.createBidirectionalStream()).writable.getWriter();
 await writer.write(new TextEncoder().encode('hello'));
@@ -94,8 +96,38 @@ Iterate to compliance against `draft-ietf-webtrans-http3-15`. This is the
 **practical conformance bar**; pass it and we have a working WebTransport
 server. Failures uncovered here drive bug-fix work in Phases 1-7.
 
-Document the manual-test recipe and any known-issue carve-outs in this
-phase's PR.
+The harness for this phase lives in
+[`netty-codec-webtransport-tests`](../netty-codec-webtransport-tests/) — a
+dedicated module that drives Chromium via Playwright Java against an
+in-process server fixture. Six cases are wired:
+
+1. Bidirectional stream echo round-trip.
+2. Unidirectional stream + server-initiated reply.
+3. Datagram round-trip.
+4. Server-initiated bidirectional stream.
+5. Clean session close with application error code + reason.
+6. `DRAIN_WEBTRANSPORT_SESSION` capsule observed by the JS `wt.draining`
+   promise.
+
+Run the suite:
+
+```sh
+mvn -B verify -P integration                                    # headless
+mvn -B verify -P integration -Dpw.headed=true                   # visible browser window
+mvn -B verify -P integration -Dpw.headed=true -Dpw.devtools=true   # + DevTools open
+mvn -B verify -P integration -Dpw.headed=true -Dpw.slowmo=500      # 500 ms slow-mo
+```
+
+CI runs the integration job in parallel with the unit-test job in
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+
+**Status:** harness is in place; the actual handshake currently fails on the
+JS side with `WebTransportError: Opening handshake failed.` and no UDP
+traffic reaches the server. Likely root cause is either the self-signed cert
+not satisfying Chromium's `serverCertificateHashes` requirements (algorithm,
+key size, validity, or extensions) or a Chromium policy that rejects the
+test setup. Debugging requires inspecting `chrome://net-internals` in headed
+mode — that's the next concrete task.
 
 ## Phase 9 — Java client handler
 
@@ -117,11 +149,16 @@ Cut `1.0.0`. Begin a stability commitment for the public API.
 ## Status
 
 Phases 1-5 implemented; Phase 6 (flow-control enforcement) stubbed but not
-enforced. The public API has been re-shaped to match Netty's HTTP/2-multiplex
-idiom: each WebTransport stream is its own `QuicStreamChannel` with an
-independent pipeline, datagrams arrive as `WebTransportDatagramFrame` events
-on the session channel, and session lifecycle fires as Netty user events
-(`WebTransportSessionEvent.Established` / `Draining` / `Closed`). The original
-callback-style `WebTransportSessionHandler` has been deleted.
+enforced. Phase 7 (echo example) lives in `netty-codec-webtransport-example`.
+Phase 8 (browser interop) harness lives in `netty-codec-webtransport-tests`
+with six wired test cases; the handshake itself does not yet succeed and
+needs Chromium-side debugging. Phase 9 (Java client) is untouched.
 
-Up next: Phase 7 (echo example) and Phase 6 (real flow-control enforcement).
+The public API has been re-shaped to match Netty's HTTP/2-multiplex idiom:
+each WebTransport stream is its own `QuicStreamChannel` with an independent
+pipeline, datagrams arrive as `WebTransportDatagramFrame` events on the
+session channel, and session lifecycle fires as Netty user events
+(`WebTransportSessionEvent.Established` / `Draining` / `Closed`).
+
+Up next: Phase 8 — make the existing six interop tests pass, then Phase 6
+(real flow-control enforcement).

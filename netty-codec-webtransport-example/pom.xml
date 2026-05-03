@@ -32,4 +32,23 @@
             <scope>runtime</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                Convenience runner. From the repo root:
+                    mvn -B -pl netty-codec-webtransport-example -am exec:java
+                Then open http://localhost:8080/ in Chrome and click "Connect".
+                Override ports with -DWT_PORT=9000 -DHTTP_PORT=9001.
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <configuration>
+                    <mainClass>io.suboptimal.netty.webtransport.example.EchoServer</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

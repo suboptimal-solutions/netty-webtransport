@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.suboptimal-solutions</groupId>
+        <artifactId>netty-codec-webtransport-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>netty-codec-webtransport-tests</artifactId>
+    <packaging>jar</packaging>
+
+    <name>netty-codec-webtransport-tests</name>
+    <description>End-to-end browser interop tests driven by Playwright + Chromium against the WebTransport server.</description>
+
+    <properties>
+        <!-- Pinned to the bundled Chromium that supports draft-15 WebTransport. -->
+        <playwright.version>1.59.0</playwright.version>
+        <!--
+            Skip these tests by default. Enable with `-P integration` (see profile below) or
+            `-Dskip.integration.tests=false` directly.
+        -->
+        <skip.integration.tests>true</skip.integration.tests>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>netty-codec-webtransport</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-native-quic</artifactId>
+            <classifier>${os.detected.classifier}</classifier>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.microsoft.playwright</groupId>
+            <artifactId>playwright</artifactId>
+            <version>${playwright.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <skipTests>${skip.integration.tests}</skipTests>
+                    <!-- Pipe test stdout/stderr to the Maven console so the manual-inspection
+                         pause message and `[browser.*]` console captures are actually visible. -->
+                    <redirectTestOutputToFile>false</redirectTestOutputToFile>
+                    <systemPropertyVariables>
+                        <pw.headed>${pw.headed}</pw.headed>
+                        <pw.devtools>${pw.devtools}</pw.devtools>
+                        <pw.slowmo>${pw.slowmo}</pw.slowmo>
+                        <pw.holdOpen>${pw.holdOpen}</pw.holdOpen>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <!--
+            Activate browser interop tests:
+                mvn -B verify -P integration
+            Headed (auto-pauses on failure with diagnostic chrome:// tabs open):
+                mvn -B verify -P integration -Dpw.headed=true
+            Headed + DevTools panel open for every page:
+                mvn -B verify -P integration -Dpw.headed=true -Dpw.devtools=true
+            Slow-motion to watch the browser drive the test:
+                mvn -B verify -P integration -Dpw.headed=true -Dpw.slowmo=500
+            Adjust the manual-inspection hold time (minutes; 0 disables):
+                mvn -B verify -P integration -Dpw.headed=true -Dpw.holdOpen=30
+        -->
+        <profile>
+            <id>integration</id>
+            <properties>
+                <skip.integration.tests>false</skip.integration.tests>
+                <pw.headed>false</pw.headed>
+                <pw.devtools>false</pw.devtools>
+                <pw.slowmo>0</pw.slowmo>
+                <pw.holdOpen>10</pw.holdOpen>
+            </properties>
+        </profile>
+    </profiles>
+</project>

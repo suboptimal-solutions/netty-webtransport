@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WebTransport echo test fixture</title>
+</head>
+<body>
+<h1>WebTransport echo test fixture</h1>
+<p>This page is loaded by Playwright; it exposes <code>window.*</code> entry points the JUnit
+tests call via <code>page.evaluate(...)</code>.</p>
+<pre id="log"></pre>
+<script>
+"use strict";
+
+let wt = null;
+
+function log(msg) {
+    const el = document.getElementById("log");
+    el.textContent += msg + "\n";
+}
+
+async function readAllText(reader) {
+    const chunks = [];
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+    }
+    let total = 0;
+    for (const c of chunks) total += c.length;
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const c of chunks) { out.set(c, off); off += c.length; }
+    return new TextDecoder().decode(out);
+}
+
+window.connect = async ({ url, certHash }) => {
+    // certHash is an array of byte values (each 0-255) — the SHA-256 of the DER-encoded
+    // server certificate. Used with WebTransport's serverCertificateHashes option to trust
+    // the self-signed test cert without a CA chain.
+    const bytes = new Uint8Array(certHash);
+    let phase = "construct";
+    try {
+        wt = new WebTransport(url, {
+            serverCertificateHashes: [{
+                algorithm: "sha-256",
+                value: bytes.buffer
+            }]
+        });
+        phase = "ready";
+        await wt.ready;
+        log("connected: " + url);
+        return { ok: true };
+    } catch (e) {
+        let closedInfo = null;
+        if (wt) {
+            try {
+                closedInfo = await wt.closed.catch(c => ({
+                    closeCode: c.closeCode, reason: c.reason, message: String(c)
+                }));
+            } catch (_) {}
+        }
+        return {
+            ok: false,
+            phase: phase,
+            error: String(e),
+            name: e && e.name,
+            message: e && e.message,
+            closed: closedInfo
+        };
+    }
+};
+
+window.echoBidi = async (text) => {
+    const stream = await wt.createBidirectionalStream();
+    const writer = stream.writable.getWriter();
+    await writer.write(new TextEncoder().encode(text));
+    await writer.close();
+    return await readAllText(stream.readable.getReader());
+};
+
+window.echoUni = async (text) => {
+    const writable = await wt.createUnidirectionalStream();
+    const writer = writable.getWriter();
+    await writer.write(new TextEncoder().encode(text));
+    await writer.close();
+    const reader = wt.incomingUnidirectionalStreams.getReader();
+    const { value: replyStream } = await reader.read();
+    reader.releaseLock();
+    return await readAllText(replyStream.getReader());
+};
+
+window.echoDatagram = async (text) => {
+    const writer = wt.datagrams.writable.getWriter();
+    await writer.write(new TextEncoder().encode(text));
+    writer.releaseLock();
+    const reader = wt.datagrams.readable.getReader();
+    const { value } = await reader.read();
+    reader.releaseLock();
+    return new TextDecoder().decode(value);
+};
+
+window.observeIncomingBidi = async () => {
+    const reader = wt.incomingBidirectionalStreams.getReader();
+    const { value: stream } = await reader.read();
+    reader.releaseLock();
+    return await readAllText(stream.readable.getReader());
+};
+
+window.gracefulClose = async (code, reason) => {
+    wt.close({ closeCode: code, reason: reason });
+    try {
+        const info = await wt.closed;
+        return { ok: true, closeCode: info.closeCode, reason: info.reason };
+    } catch (e) {
+        return { ok: false, error: String(e) };
+    }
+};
+
+window.observeDraining = async () => {
+    await wt.draining;
+    return true;
+};
+</script>
+</body>
+</html>

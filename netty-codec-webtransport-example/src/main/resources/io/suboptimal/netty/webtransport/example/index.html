@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>netty-codec-webtransport echo tester</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         max-width: 880px; margin: 24px auto; padding: 0 16px; line-height: 1.45; }
+  h1 { font-size: 18px; }
+  .row { display: flex; gap: 8px; margin: 8px 0; align-items: center; flex-wrap: wrap; }
+  input[type=text] { flex: 1; min-width: 240px; padding: 6px 8px; font: inherit; }
+  button { padding: 6px 14px; font: inherit; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #status { padding: 6px 10px; border-radius: 4px; font-weight: 600; display: inline-block; }
+  .s-idle { background: #eee; color: #333; }
+  .s-ok { background: #d8f5d8; color: #064; }
+  .s-err { background: #fddada; color: #800; }
+  pre#log { background: #111; color: #ddd; padding: 12px; border-radius: 4px;
+            height: 360px; overflow-y: auto; font-size: 12px; line-height: 1.5; }
+  .ok { color: #6c6; } .err { color: #f88; } .info { color: #aaf; }
+</style>
+</head>
+<body>
+
+<h1>netty-codec-webtransport echo tester</h1>
+<p>This page reads <code>/cert.json</code> from the same origin, then opens a WebTransport
+session against the in-process echo server. Every action below exercises one wire-protocol
+feature; the right-hand side of the log is the server's reply.</p>
+
+<div class="row">
+  <span>Status:</span>
+  <span id="status" class="s-idle">disconnected</span>
+  <button id="btn-connect">Connect</button>
+  <button id="btn-disconnect" disabled>Close session</button>
+</div>
+
+<div class="row">
+  <input type="text" id="bidi-text" value="hello bidi" placeholder="bidi payload">
+  <button id="btn-bidi" disabled>Send bidi stream + read echo</button>
+</div>
+<div class="row">
+  <input type="text" id="uni-text" value="hello uni" placeholder="uni payload">
+  <button id="btn-uni" disabled>Send uni stream + await server uni reply</button>
+</div>
+<div class="row">
+  <input type="text" id="dg-text" value="hello dgram" placeholder="datagram payload">
+  <button id="btn-dg" disabled>Send datagram + read echo</button>
+</div>
+<div class="row">
+  <button id="btn-incoming" disabled>Read next server-initiated bidi stream</button>
+  <button id="btn-clear-log">Clear log</button>
+</div>
+
+<pre id="log"></pre>
+
+<script>
+"use strict";
+
+let wt = null;
+let datagramReader = null;
+
+const $ = (id) => document.getElementById(id);
+const logEl = $("log");
+const statusEl = $("status");
+
+function ts() { return new Date().toISOString().substring(11, 23); }
+function log(line, cls = "") {
+    const span = document.createElement("span");
+    span.className = cls;
+    span.textContent = `[${ts()}] ${line}\n`;
+    logEl.appendChild(span);
+    logEl.scrollTop = logEl.scrollHeight;
+}
+function setStatus(text, cls) {
+    statusEl.textContent = text;
+    statusEl.className = cls;
+}
+function setActive(connected) {
+    $("btn-connect").disabled = connected;
+    $("btn-disconnect").disabled = !connected;
+    for (const id of ["btn-bidi", "btn-uni", "btn-dg", "btn-incoming"]) {
+        $(id).disabled = !connected;
+    }
+}
+
+async function readAllText(reader) {
+    const chunks = [];
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+    }
+    let total = 0;
+    for (const c of chunks) total += c.length;
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const c of chunks) { out.set(c, off); off += c.length; }
+    return new TextDecoder().decode(out);
+}
+
+async function fetchCertHash() {
+    const res = await fetch("/cert.json");
+    if (!res.ok) throw new Error("cert.json " + res.status);
+    const j = await res.json();
+    const bytes = new Uint8Array(atob(j.certHashBase64).split("").map(c => c.charCodeAt(0)));
+    return { certHash: bytes, wtPort: j.wtPort };
+}
+
+$("btn-connect").addEventListener("click", async () => {
+    try {
+        setStatus("connecting…", "s-idle");
+        const { certHash, wtPort } = await fetchCertHash();
+        const url = `https://${location.hostname}:${wtPort}/echo`;
+        log(`opening ${url} (cert sha-256 ${certHash.length}B)`, "info");
+        wt = new WebTransport(url, {
+            serverCertificateHashes: [{ algorithm: "sha-256", value: certHash.buffer }]
+        });
+        wt.closed.then(
+            (info) => { log(`session closed cleanly: code=${info && info.closeCode} reason=${JSON.stringify(info && info.reason)}`, "info");
+                        setStatus("disconnected", "s-idle"); setActive(false); },
+            (err) => { log(`session closed with error: ${err}`, "err");
+                       setStatus("error", "s-err"); setActive(false); }
+        );
+        await wt.ready;
+        log("session ready", "ok");
+        setStatus("connected", "s-ok");
+        setActive(true);
+
+        // Background datagram reader: log every inbound datagram.
+        datagramReader = wt.datagrams.readable.getReader();
+        (async () => {
+            try {
+                while (true) {
+                    const { value, done } = await datagramReader.read();
+                    if (done) break;
+                    log("← datagram: " + new TextDecoder().decode(value), "ok");
+                }
+            } catch (e) {
+                log("datagram reader stopped: " + e, "info");
+            }
+        })();
+    } catch (e) {
+        log("connect failed: " + (e && e.message ? e.message : e), "err");
+        setStatus("error", "s-err");
+        setActive(false);
+    }
+});
+
+$("btn-disconnect").addEventListener("click", () => {
+    try {
+        wt.close({ closeCode: 7, reason: "manual close" });
+        log("close({code:7,reason:'manual close'}) sent", "info");
+    } catch (e) {
+        log("close threw: " + e, "err");
+    }
+});
+
+$("btn-bidi").addEventListener("click", async () => {
+    const text = $("bidi-text").value;
+    try {
+        log("→ bidi: " + JSON.stringify(text));
+        const stream = await wt.createBidirectionalStream();
+        const writer = stream.writable.getWriter();
+        await writer.write(new TextEncoder().encode(text));
+        await writer.close();
+        const reply = await readAllText(stream.readable.getReader());
+        log("← bidi echo: " + JSON.stringify(reply), "ok");
+    } catch (e) { log("bidi failed: " + e, "err"); }
+});
+
+$("btn-uni").addEventListener("click", async () => {
+    const text = $("uni-text").value;
+    try {
+        log("→ uni: " + JSON.stringify(text));
+        const writable = await wt.createUnidirectionalStream();
+        const writer = writable.getWriter();
+        await writer.write(new TextEncoder().encode(text));
+        await writer.close();
+
+        const reader = wt.incomingUnidirectionalStreams.getReader();
+        const { value: replyStream } = await reader.read();
+        reader.releaseLock();
+        const reply = await readAllText(replyStream.getReader());
+        log("← uni server-reply: " + JSON.stringify(reply), "ok");
+    } catch (e) { log("uni failed: " + e, "err"); }
+});
+
+$("btn-dg").addEventListener("click", async () => {
+    const text = $("dg-text").value;
+    try {
+        log("→ datagram: " + JSON.stringify(text));
+        const w = wt.datagrams.writable.getWriter();
+        await w.write(new TextEncoder().encode(text));
+        w.releaseLock();
+        // The reply (if any) is logged by the background datagram reader.
+    } catch (e) { log("datagram failed: " + e, "err"); }
+});
+
+$("btn-incoming").addEventListener("click", async () => {
+    try {
+        log("waiting for next server-initiated bidi stream…", "info");
+        const reader = wt.incomingBidirectionalStreams.getReader();
+        const { value: stream } = await reader.read();
+        reader.releaseLock();
+        const got = await readAllText(stream.readable.getReader());
+        log("← server-initiated stream: " + JSON.stringify(got), "ok");
+    } catch (e) { log("incoming bidi failed: " + e, "err"); }
+});
+
+$("btn-clear-log").addEventListener("click", () => { logEl.textContent = ""; });
+</script>
+</body>
+</html>

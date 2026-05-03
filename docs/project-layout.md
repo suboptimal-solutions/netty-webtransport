@@ -10,6 +10,7 @@ Two Maven modules under one parent reactor:
 | --- | --- | --- |
 | [`netty-codec-webtransport/`](../netty-codec-webtransport/) | `netty-codec-webtransport` | The codec — frames, capsules, handlers, server, session API. |
 | [`netty-codec-webtransport-example/`](../netty-codec-webtransport-example/) | `netty-codec-webtransport-example` | Runnable demos. Hosts `EchoServer`, `EchoSessionHandler`, `EchoStreamHandler`. |
+| [`netty-codec-webtransport-tests/`](../netty-codec-webtransport-tests/) | `netty-codec-webtransport-tests` | Browser interop tests driven by Playwright + Chromium. Skipped by default; activate with `-P integration`. |
 
 The single-module-codec shape mirrors how `netty-codec-http3`,
 `netty-codec-http2`, `netty-codec-quic`, and `netty-codec-mqtt` ship in Netty
@@ -28,11 +29,13 @@ Module directories match their `artifactId` exactly — no abbreviated
 
 ## Tests
 
-Unit and integration tests both live in
-`netty-codec-webtransport/src/test/java`. If integration tests later need
-special JVM args (e.g. `--add-opens` for Netty internals on JDK 21+) or
-longer timeouts, gate them with a Maven `integration` profile rather than
-splitting modules.
+Unit tests live in `netty-codec-webtransport/src/test/java`. Browser interop
+tests live in their own module, `netty-codec-webtransport-tests`, gated
+behind a Maven `integration` profile so the heavy Playwright + Chromium
+download doesn't run on every `mvn verify`. If a future integration suite
+need only JVM args (e.g. `--add-opens`) or longer timeouts and no extra
+deps, prefer a profile inside `netty-codec-webtransport` over splitting
+another module.
 
 ## Java package conventions
 
