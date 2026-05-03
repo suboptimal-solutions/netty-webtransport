@@ -43,28 +43,31 @@
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
         <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
-        <maven.failsafe.plugin.version>3.2.5</maven.failsafe.plugin.version>
         <maven.jar.plugin.version>3.4.1</maven.jar.plugin.version>
         <maven.enforcer.plugin.version>3.4.1</maven.enforcer.plugin.version>
         <os.maven.plugin.version>1.7.1</os.maven.plugin.version>
         <spotless.maven.plugin.version>2.44.0</spotless.maven.plugin.version>
         <google.java.format.version>1.22.0</google.java.format.version>
-
-        <!-- Spec target — see specs/README.md for canonical pinning -->
-        <spec.webtrans.overview>draft-ietf-webtrans-overview-12</spec.webtrans.overview>
-        <spec.webtrans.http3>draft-ietf-webtrans-http3-15</spec.webtrans.http3>
-        <spec.webtrans.http2>draft-ietf-webtrans-http2-14</spec.webtrans.http2>
     </properties>
 
     <dependencyManagement>
         <dependencies>
-            <!-- Netty BOM keeps every io.netty:* artifact on the same version. -->
+            <!-- Netty BOM pins every io.netty:* artifact to the same version. -->
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-bom</artifactId>
                 <version>${netty.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+
+            <!-- The BOM does not propagate its version onto a classifier-bearing dep
+                 unless the management entry itself names the classifier. -->
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-codec-native-quic</artifactId>
+                <version>${netty.version}</version>
+                <classifier>${os.detected.classifier}</classifier>
             </dependency>
 
             <!-- Test BOMs / direct pins -->
@@ -117,11 +120,6 @@
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-failsafe-plugin</artifactId>
-                    <version>${maven.failsafe.plugin.version}</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-jar-plugin</artifactId>
                     <version>${maven.jar.plugin.version}</version>
                 </plugin>
@@ -129,11 +127,12 @@
         </pluginManagement>
 
         <plugins>
-            <!-- Fail fast if the toolchain is too old. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
                 <version>${maven.enforcer.plugin.version}</version>
+                <!-- Toolchain check is identical for every reactor module; run it once on the parent. -->
+                <inherited>false</inherited>
                 <executions>
                     <execution>
                         <id>enforce-toolchain</id>
@@ -147,8 +146,8 @@
                                     <message>Maven 3.9+ is required (use your locally installed mvn).</message>
                                 </requireMavenVersion>
                                 <requireJavaVersion>
-                                    <version>[21,)</version>
-                                    <message>Java 21+ is required.</message>
+                                    <version>[${java.version},)</version>
+                                    <message>Java ${java.version}+ is required.</message>
                                 </requireJavaVersion>
                             </rules>
                         </configuration>
@@ -156,7 +155,6 @@
                 </executions>
             </plugin>
 
-            <!-- Spotless + Google Java Format. No license header injection (root LICENSE only). -->
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>

@@ -15,11 +15,11 @@ codec. The pipeline (server side):
 ```
 UDP datagrams
     ↓
-QuicCodec  (io.netty:netty-codec-quic + native quiche)
+QuicServerCodecBuilder pipeline  (io.netty:netty-codec-quic + native quiche)
     ↓
-Http3 server connection handler  (io.netty:netty-codec-http3)
+Http3ServerConnectionHandler  (io.netty:netty-codec-http3)
     ↓                                     ↓
-Http3 control stream            Http3 request streams (one per CONNECT)
+HTTP/3 control stream            HTTP/3 request streams (one per CONNECT)
                                           ↓
                             WebTransportServerHandler  (us)
                                           ↓
@@ -55,17 +55,20 @@ All data-plane code uses `io.netty.buffer.ByteBuf` directly. No `byte[]`, no
   `ByteBuf.getBytes(...)` allocate a fresh `byte[]` and are forbidden on the
   hot path. Reviewers reject PRs that introduce these calls without a written
   justification.
-- **Constants for header field names.** HTTP/3 header field names like
-  `:method`, `:protocol`, `origin`, `sec-webtransport-http3-draft02` are
-  declared as `AsciiString` constants once and reused. `String` materialization
-  is forbidden on the hot path.
+- **Constants for header field names.** Pseudo-headers and protocol tokens
+  (`:method`, `:protocol`, `webtransport-h3`, `origin`) are declared as
+  `AsciiString` constants once and reused. `String` materialization is
+  forbidden on the hot path.
 - **Zero-allocation varint codec.** WebTransport uses QUIC variable-length
   integers (RFC 9000 §16) heavily. The encoder/decoder reads and writes
   directly against `ByteBuf` indices; it does not allocate.
-- **Cross-event-loop transfers require explicit duplication.** A `ByteBuf`
-  handed off to a different event loop must be `retainedDuplicate()`'d (or
-  `retainedSlice()`'d) by the sender; the receiver releases. Sharing a buffer
-  whose reader index is being mutated by another thread is a bug.
+- **Cross-event-loop transfers require explicit retain.** A `ByteBuf`
+  handed off to a different event loop must be retained by the sender so the
+  refcount cannot drop to zero under the receiver. Use `retain()` if both
+  sides will share reader/writer indices, or `retainedDuplicate()` /
+  `retainedSlice()` if the receiver needs its own indices. Sharing a buffer
+  whose indices are mutated by another thread without giving the receiver its
+  own view is a bug.
 
 ## 3. Threading model
 
@@ -86,9 +89,9 @@ All data-plane code uses `io.netty.buffer.ByteBuf` directly. No `byte[]`, no
   Use it for per-thread varint scratch buffers, decoder state, etc.
 - **`Recycler` for high-frequency small objects.** Decoded frame headers and
   capsule descriptors that are allocated per-frame should consider `io.netty
-  .util.Recycler`. Caveat: on JDK 21 the JIT's escape analysis sometimes
-  scalar-replaces small records, making them free; benchmark before adopting
-  `Recycler`.
+  .util.Recycler`. Caveat: the JIT's escape analysis can scalar-replace
+  short-lived objects whose allocations don't escape, making them effectively
+  free; benchmark before adopting `Recycler`.
 - **Backpressure propagates.** When a `Channel`'s writability flips,
   `channelWritabilityChanged` fires. The session API surfaces this so the
   application can throttle its producer rather than buffering unbounded data

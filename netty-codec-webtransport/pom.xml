@@ -17,27 +17,17 @@
     <description>WebTransport-over-HTTP/3 codec, handlers, and session API for Netty 4.2.</description>
 
     <dependencies>
-        <!-- HTTP/3 codec graduated into io.netty core in Netty 4.2.1.Final.
-             It transitively pulls netty-codec-quic, netty-buffer, netty-common, netty-transport. -->
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-codec-http3</artifactId>
         </dependency>
-
-        <!-- QUIC native binaries (Cloudflare quiche via JNI + BoringSSL).
-             The classifier is resolved at build time by os-maven-plugin in the parent POM.
-             The version must be declared explicitly: netty-bom pins the base GAV but Maven
-             will not propagate that pin onto a classifier dependency declared without a
-             version, so we reuse the BOM-managed property instead. -->
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-codec-native-quic</artifactId>
-            <version>${netty.version}</version>
             <classifier>${os.detected.classifier}</classifier>
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Test dependencies. -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

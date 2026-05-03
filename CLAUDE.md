@@ -42,7 +42,7 @@ the same commit.**
 1. **Don't copy bytes — slice them.** `ByteBuf.slice()` /
    `retainedSlice()` / `readSlice(int)` over `getBytes(...)`,
    `toString()`, or any path that allocates a `byte[]`. Details in
-   [docs/architecture.md#zero-copy-data-path](docs/architecture.md).
+   [docs/architecture.md §2](docs/architecture.md#2-zero-copy-data-path).
 2. **Don't block the event loop.** Codec / handler code runs on a Netty event
    loop. Virtual threads are forbidden there; allowed only in application code
    that consumes the session API.
@@ -52,13 +52,9 @@ the same commit.**
 
 ## Build and format
 
-```sh
-mvn spotless:apply     # auto-fix formatting (Google Java Format)
-mvn -B verify          # full build, runs tests and Spotless check
-```
-
-`mvn verify` includes `spotless:check`. CI fails on unformatted code. There is
-no Maven wrapper — use your locally installed `mvn` (3.9+).
+`mvn spotless:apply && mvn -B verify`. Full rationale, JDK / Maven version
+requirements, and the no-wrapper decision live in [README.md](README.md) and
+[docs/project-layout.md](docs/project-layout.md).
 
 ## What's next
 
@@ -68,9 +64,8 @@ browser via the W3C WebTransport JS API. A Java client lands late.
 
 ## What NOT to do
 
-- Don't add per-file Apache 2.0 headers — licensing is at the repo root only.
-- Don't depend on `io.netty.incubator:netty-incubator-codec-quic` or
-  `netty-incubator-codec-http3`; those are superseded by graduated artifacts in
-  `io.netty` core since Netty 4.2.1.Final.
-- Don't introduce a Maven wrapper.
+- Don't add per-file Apache 2.0 headers — see
+  [docs/project-layout.md](docs/project-layout.md#licensing).
+- Don't depend on incubator Netty artifacts — see
+  [docs/netty-stack.md](docs/netty-stack.md#superseded-artifacts-do-not-depend-on).
 - Don't write documentation files Claude wasn't asked for.

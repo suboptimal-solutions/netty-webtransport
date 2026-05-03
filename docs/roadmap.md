@@ -25,9 +25,10 @@ Encoder and decoder for the Capsule Protocol (RFC 9297). Type registry as a
 sealed interface hierarchy with one record per capsule type. Reuse the
 varint primitives from Phase 1.
 
-Spec refs: RFC 9297 §3-4, plus the WebTransport-specific capsule types in
-`draft-ietf-webtrans-http3-15` §6 (DRAIN_SESSION, CLOSE_SESSION) and §7
-(MAX_STREAMS, MAX_DATA, etc.).
+Spec refs: RFC 9297 §3 (Capsule Protocol) + §5 (registry), plus the
+WebTransport-specific capsule types in `draft-ietf-webtrans-http3-15` §6
+(`WT_DRAIN_SESSION`, `WT_CLOSE_SESSION`) and §5.6 (`WT_MAX_STREAMS`,
+`WT_MAX_DATA`, `WT_STREAMS_BLOCKED`, `WT_DATA_BLOCKED`).
 
 ## Phase 3 — Session API and lifecycle (server-side)
 
@@ -35,8 +36,9 @@ Spec refs: RFC 9297 §3-4, plus the WebTransport-specific capsule types in
 opening, draining, closing. Hooks for incoming streams and datagrams. No
 network I/O yet — driven by `EmbeddedChannel` in tests.
 
-Spec refs: `draft-ietf-webtrans-http3-15` §3 (lifecycle), W3C
-`w3c-webtransport.html` for the semantics the API must support.
+Spec refs: `draft-ietf-webtrans-http3-15` §3 (establishment) + §6
+(termination), W3C `w3c-webtransport.html` for the semantics the API must
+support.
 
 ## Phase 4 — Server handler
 
@@ -46,8 +48,8 @@ extended-CONNECT request (`:protocol = webtransport`), advertises
 `SETTINGS_WT_MAX_SESSIONS`. Demuxes incoming bidi/uni streams to sessions
 via WT_STREAM frame inspection.
 
-Spec refs: RFC 9220 (extended CONNECT), `draft-ietf-webtrans-http3-15` §4.1-4.2
-(stream framing), §5 (SETTINGS).
+Spec refs: RFC 9220 (extended CONNECT), `draft-ietf-webtrans-http3-15` §3.1
+(SETTINGS), §4.2-4.3 (stream framing).
 
 ## Phase 5 — Datagram context-id demux on server
 
@@ -56,7 +58,7 @@ stream ID. Zero-copy slice passes the payload to the session unchanged. See
 [architecture.md §6](architecture.md#6-datagram-fast-path).
 
 Spec refs: RFC 9221 (QUIC datagram), RFC 9297 §2 (HTTP datagram framing),
-`draft-ietf-webtrans-http3-15` §4.4 (quarter-stream-id).
+`draft-ietf-webtrans-http3-15` §4.5 (datagrams + quarter-stream-id).
 
 ## Phase 6 — Flow-control capsules
 
@@ -65,7 +67,8 @@ Enforcement on incoming streams; emission to keep up with browser-side
 limits. The browser uses these aggressively, so this phase is a prerequisite
 for Phase 8 interop.
 
-Spec refs: `draft-ietf-webtrans-http3-15` §7.
+Spec refs: `draft-ietf-webtrans-http3-15` §5 (Flow Control), with the
+capsule wire formats in §5.6.
 
 ## Phase 7 — First server-side echo demo
 

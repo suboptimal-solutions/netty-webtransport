@@ -9,6 +9,11 @@ trim_trailing_whitespace = true
 insert_final_newline = true
 max_line_length = 120
 
+[*.java]
+# Google Java Format wraps at 100; keep .editorconfig in lockstep so
+# IDE-formatted lines don't get rewritten by Spotless.
+max_line_length = 100
+
 [*.md]
 trim_trailing_whitespace = false
 

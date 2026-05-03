@@ -12,12 +12,11 @@
 
 - [ ] Tests added or updated under `netty-codec-webtransport/src/test/java`
 - [ ] `mvn spotless:apply` run; `mvn -B verify` passes locally
-- [ ] No `byte[]` allocation on hot paths
-      (see [docs/architecture.md §2](../docs/architecture.md))
-- [ ] No `String.toByteArray` / `ByteBuf.toString(Charset)` /
-      `ByteBuf.getBytes(...)` on hot paths
+- [ ] No `byte[]` allocation, no `String.getBytes(...)`, no
+      `ByteBuf.toString(Charset)`, no `ByteBuf.getBytes(...)` on hot paths
+      (see [docs/architecture.md §2](../docs/architecture.md#2-zero-copy-data-path))
 - [ ] Reference-counting discipline observed
-      (see [docs/architecture.md §4](../docs/architecture.md))
+      (see [docs/architecture.md §4](../docs/architecture.md#4-reference-counting-discipline))
 - [ ] If touching the wire format, [`docs/wire-format.md`](../docs/wire-format.md)
       updated accordingly
 

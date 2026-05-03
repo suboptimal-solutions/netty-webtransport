@@ -30,14 +30,9 @@ jobs:
           java-version: 21
           cache: maven
 
-      - name: Show toolchain
-        run: |
-          mvn --version
-          java -version
-
-      - name: Build (mvn -B verify)
-        # `verify` runs the bound spotless:check, so unformatted code fails the build.
-        run: mvn -B -ntp verify
+      - name: Build
+        # -V prints toolchain info before the build (replaces a separate version step).
+        run: mvn -B -ntp -V verify
 
       - name: Upload surefire reports on failure
         if: failure()
@@ -46,7 +41,3 @@ jobs:
           name: surefire-reports
           path: '**/target/surefire-reports/**'
           if-no-files-found: ignore
-
-# TODO: enable macos-latest in the matrix once a real test exercises the QUIC native
-# classifier. Until the codec module ships networking code, macOS adds CI cost without
-# coverage.

@@ -17,8 +17,6 @@
 specs/*.txt    -text
 specs/*.html   -text
 
-# Maven wrapper would be marked as binary if we shipped one; we do not.
-
 # Linguist hints (GitHub language stats)
 specs/* linguist-vendored
 docs/*  linguist-documentation
