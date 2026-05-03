@@ -9,7 +9,7 @@ Index of design and reference docs for `netty-codec-webtransport`.
 | [specs.md](specs.md) | Reading guide into the vendored IETF / W3C specs in [`../specs/`](../specs/), with an inline glossary. |
 | [project-layout.md](project-layout.md) | Module / package conventions, Maven layout rationale, formatting and licensing policy. |
 | [roadmap.md](roadmap.md) | Phased implementation plan. Server-first; the priority client is the browser via the W3C WebTransport JS API. |
-| [wire-format.md](wire-format.md) | Reserved. Will map codec classes to spec sections once the implementation lands. |
+| [wire-format.md](wire-format.md) | Spec-to-class map: which codec class implements which section of which spec. |
 
 For non-doc context:
 

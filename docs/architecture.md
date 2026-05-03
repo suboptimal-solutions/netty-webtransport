@@ -9,28 +9,58 @@ constraint shapes every decision below.
 
 ## 1. Overview
 
-WebTransport sits on top of Netty's HTTP/3 codec, which sits on top of Netty's QUIC
-codec. The pipeline (server side):
+WebTransport sits on top of Netty's HTTP/3 codec, which sits on top of Netty's
+QUIC codec. The user-facing shape mirrors HTTP/2 multiplex: one session is one
+parent-ish channel (the CONNECT request stream), each WebTransport stream is a
+child `QuicStreamChannel` with its own pipeline, and datagrams are pipeline
+messages on the session channel.
 
 ```
 UDP datagrams
     ↓
 QuicServerCodecBuilder pipeline  (io.netty:netty-codec-quic + native quiche)
     ↓
-Http3ServerConnectionHandler  (io.netty:netty-codec-http3)
-    ↓                                     ↓
-HTTP/3 control stream            HTTP/3 request streams (one per CONNECT)
-                                          ↓
-                            WebTransportServerHandler  (us)
-                                          ↓
-                            WebTransportSession  (us)  ↔  application
+QuicChannel pipeline:
+    [WebTransportServerProtocolHandler]      ← user installs this
+    [Http3ServerConnectionHandler]           ← installed by us
+    [WebTransportDatagramRouter]             ← installed by us; demuxes datagrams to sessions
+
+For each accepted CONNECT request stream (one per WebTransport session):
+    QuicStreamChannel pipeline (== "session channel"):
+        [Http3 codec internals]
+        [WebTransportConnectHandler]         ← validates CONNECT; replaces self after 200
+            ↓ becomes:
+        [WebTransportSessionHandler]         ← consumes capsules, fires lifecycle events
+        [WebTransportSessionDatagramOutboundHandler]  ← prefixes outbound datagrams
+        [user handlers from WebTransportSessionInitializer]   ← see datagram frames + events
+
+For each peer-initiated WebTransport bidi stream:
+    QuicStreamChannel pipeline:
+        [WebTransportBidiStreamPrefixHandler]   ← strips WT_STREAM (0x41) + sessionId varints
+        [user handlers from WebTransportStreamInitializer]   ← see raw ByteBuf payload
+
+For each peer-initiated WebTransport uni stream (after HTTP/3 strips type 0x54):
+    QuicStreamChannel pipeline:
+        [WebTransportUniStreamPrefixHandler]    ← strips sessionId varint
+        [user handlers from WebTransportUniStreamInitializer]
 ```
 
-The `:protocol = webtransport` extended-CONNECT request opens a long-lived stream
-that anchors a session. Subsequent client-initiated streams (uni- and bidi-) are
-mapped to that session by their session ID. Datagrams are demuxed by the
-"quarter stream ID" context-id from RFC 9297. The capsule protocol carries flow
-control and lifecycle signals on the CONNECT stream itself.
+The `:protocol = webtransport-h3` extended-CONNECT request opens a long-lived
+stream that anchors a session. Subsequent client-initiated streams (uni- and
+bidi-) are mapped to that session by their session ID; the prefix handlers
+handle that mapping and remove themselves once done. Datagrams are demuxed by
+the "quarter stream ID" context-id from RFC 9297 in
+`WebTransportDatagramRouter`, which fires a `WebTransportDatagramFrame` into
+the matching session channel's pipeline. The capsule protocol carries flow
+control and lifecycle signals on the CONNECT stream itself; capsules are
+consumed inside `WebTransportSessionHandler` and surface to user code as
+sealed `WebTransportSessionEvent` records (`Established` / `Draining` /
+`Closed`).
+
+Outbound stream creation goes through `WebTransportStreamChannelBootstrap`
+(mirrors `Http2StreamChannelBootstrap`); it allocates a fresh
+`QuicStreamChannel`, writes the WebTransport prefix bytes, then runs the
+caller's `ChannelHandler`.
 
 Client side mirrors the server. The Java client is the last protocol task in
 the [roadmap](roadmap.md); the priority client is the browser via the W3C
@@ -135,20 +165,40 @@ Netty `ByteBuf` is reference-counted. The project-wide convention:
 ## 6. Datagram fast path
 
 QUIC datagrams (RFC 9221) carry WebTransport datagrams without retransmission.
-The path from socket to application:
+The path from socket to application, on the receive side:
 
 ```
-QuicChannel.channelRead(DatagramFrame)
+QuicChannel.channelRead(ByteBuf)              ← raw datagram payload
     ↓ (no copy)
-WebTransportDatagramHandler
-    ↓ readVariableLengthInteger(buf)        ← context-id (quarter stream id)
-    ↓ session = sessions.get(contextId)     ← O(1) map lookup
-    ↓ buf.readSlice(buf.readableBytes())    ← no copy
-    ↓ session.fireDatagramReceived(payload)
+WebTransportDatagramRouter
+    ↓ readVarint(buf)                         ← quarter-stream-id
+    ↓ session = registry.get(quarterId * 4)   ← O(1) map lookup
+    ↓ frame = new WebTransportDatagramFrame(buf)   ← buf is the slice; reader index past varint
+    ↓ session.sessionChannel().pipeline().fireChannelRead(frame)
 ```
 
-No allocations beyond the `WebTransportDatagram` wrapper record, and that record
-is allocated from a thread-local `Recycler` if profiling shows it matters.
+The frame holds the original `ByteBuf` whose reader index is now past the
+context-id varint, so `frame.content()` exposes only the payload. No copy.
+The frame's release path decrements the buffer's refcount once.
+
+Send path, symmetric:
+
+```
+user handler: ctx.writeAndFlush(new WebTransportDatagramFrame(payload))   ← on session channel
+    ↓
+WebTransportSessionDatagramOutboundHandler.write(...)
+    ↓ header = alloc.buffer(varintLen(quarterId)); writeVarint(header, quarterId)
+    ↓ datagram = Unpooled.wrappedBuffer(header, payload.retain())
+    ↓ session.parentChannel().writeAndFlush(datagram, promise)
+```
+
+The wrapped composite shares storage with the user's payload; no copy. The
+header is a tiny pooled buffer (1-8 bytes).
+
+Allocations per inbound datagram: one `WebTransportDatagramFrame` holder
+record (replacement candidate for `Recycler` if profiling shows it matters).
+Allocations per outbound datagram: one short `ByteBuf` for the header varint
+plus one `CompositeByteBuf` wrapper.
 
 ## 7. Allocator tuning knobs
 

@@ -8,8 +8,8 @@ Two Maven modules under one parent reactor:
 
 | Directory | Artifact | Role |
 | --- | --- | --- |
-| [`netty-codec-webtransport/`](../netty-codec-webtransport/) | `netty-codec-webtransport` | The codec — frames, capsules, handlers, server, client, session API. |
-| [`netty-codec-webtransport-example/`](../netty-codec-webtransport-example/) | `netty-codec-webtransport-example` | Runnable demos. Empty until the codec has a usable session API. |
+| [`netty-codec-webtransport/`](../netty-codec-webtransport/) | `netty-codec-webtransport` | The codec — frames, capsules, handlers, server, session API. |
+| [`netty-codec-webtransport-example/`](../netty-codec-webtransport-example/) | `netty-codec-webtransport-example` | Runnable demos. Hosts `EchoServer`, `EchoSessionHandler`, `EchoStreamHandler`. |
 
 The single-module-codec shape mirrors how `netty-codec-http3`,
 `netty-codec-http2`, `netty-codec-quic`, and `netty-codec-mqtt` ship in Netty
@@ -18,8 +18,7 @@ because separating "frames" from "handlers" creates artificial boundaries when
 both layers evolve together.
 
 The example module exists for one reason only: demos shouldn't be on the
-production classpath of the main artifact. Once the codec has demos worth
-shipping, this module hosts them.
+production classpath of the main artifact.
 
 ## Module directory naming
 
@@ -39,9 +38,9 @@ splitting modules.
 
 | Package | Contents |
 | --- | --- |
-| `io.suboptimal.netty.webtransport` | The public API surface: handlers (server, client), session API, frame and capsule types. |
-| `io.suboptimal.netty.webtransport.internal.*` | Implementation details that should not appear in user code. Created lazily — only when a class is genuinely internal. |
-| `io.suboptimal.netty.webtransport.example` | Demo classes in the example module (not yet populated). |
+| `io.suboptimal.netty.webtransport` | Public API: `WebTransportServerProtocolHandler`, `WebTransportSession`, the three abstract `*Initializer` classes (session / bidi stream / uni stream), `WebTransportStreamChannelBootstrap`, the sealed `WebTransportSessionEvent` / `WebTransportStreamEvent` user-event hierarchies, the `WebTransportFrame` / `WebTransportDatagramFrame` message hierarchy, and the codec primitives `VarintCodec` / `Capsule` / `CapsuleCodec` / `WebTransportProtocol`. |
+| `io.suboptimal.netty.webtransport.internal.*` | Implementation: the connect handler, steady-state session inbound handler, datagram outbound interceptor, bidi/uni stream prefix handlers, datagram router, session registry, default session implementation. User code should not reference these. |
+| `io.suboptimal.netty.webtransport.example` | Demo handlers in the example module: `EchoServer`, `EchoSessionHandler`, `EchoStreamHandler`. |
 
 `Automatic-Module-Name: io.suboptimal.netty.webtransport` is set in the codec
 JAR manifest for JPMS compatibility.

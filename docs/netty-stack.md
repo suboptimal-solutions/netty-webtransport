@@ -55,32 +55,39 @@ upstream but we do not test against them.
 Netty's HTTP/3 codec stops at HTTP/3 framing; WebTransport semantics live on
 top. The codec module owes:
 
-- **Capsule protocol parser (RFC 9297).** Reads / writes capsules off the
-  HTTP/3 DATA frames on the CONNECT stream. The capsule-type registry is
-  open-ended; we implement the WebTransport-relevant ones (`WT_DRAIN_SESSION`,
-  `WT_CLOSE_SESSION`, `WT_MAX_STREAMS`, `WT_MAX_DATA`, `WT_STREAMS_BLOCKED`,
-  `WT_DATA_BLOCKED`).
-- **WebTransport session registry.** Maps `(connection, session-id)` tuples
-  to a session object. Lookups happen on every datagram and every
-  client-initiated stream, so it is on the hot path.
-- **Datagram context-id demux.** RFC 9297 datagrams arrive at `QuicChannel`
-  with a varint context-id (the quarter stream ID, per the WebTransport
-  HTTP/3 draft). We demux on this id to route to the right session.
-- **WT_STREAM signal at the start of WebTransport bidi streams.** The first
-  bytes of each bidirectional WebTransport stream are the signal value
-  `0x41` (registered as the `WT_STREAM` HTTP/3 frame type but lacking a
-  length field — it is **not** a real HTTP/3 frame), then the session ID.
-  The HTTP/3 codec cannot parse this as a normal frame, so we strip the
-  signal + session ID off the request stream before any HTTP/3 framing
-  applies.
-- **Unidirectional stream-type reader.** Server- or client-initiated
-  unidirectional WebTransport streams begin with the HTTP/3 unidirectional
-  stream type `0x54`, then a session-ID varint. We dispatch on this before
-  handing the stream to the session.
+- **Capsule protocol parser (RFC 9297).** ✅ Implemented — `Capsule` (sealed)
+  + `CapsuleCodec`. Reads / writes capsules off the HTTP/3 DATA frames on the
+  CONNECT stream. We cover `CLOSE_WEBTRANSPORT_SESSION`,
+  `DRAIN_WEBTRANSPORT_SESSION`, `WT_MAX_STREAMS_{BIDI,UNI}`, `WT_MAX_DATA`,
+  `WT_STREAMS_BLOCKED_{BIDI,UNI}`, `WT_DATA_BLOCKED`, plus a forward-compat
+  `Capsule.Unknown`.
+- **WebTransport session registry.** ✅ Implemented — `internal.SessionRegistry`,
+  a `ConcurrentHashMap<Long, DefaultWebTransportSession>`. Hot-path O(1)
+  lookups for every datagram and every peer-initiated stream.
+- **Datagram context-id demux.** ✅ Implemented —
+  `internal.WebTransportDatagramRouter` (parent QuicChannel pipeline) +
+  `internal.WebTransportSessionDatagramOutboundHandler` (session channel
+  pipeline, outbound). RFC 9297 §2.1 + draft-15 §4.5.
+- **WT_STREAM signal at the start of WebTransport bidi streams.** ✅
+  Implemented — `internal.WebTransportBidiStreamPrefixHandler`. Strips the
+  signal value `0x41` and session ID before HTTP/3 framing applies; falls back
+  to HTTP/3 if the leading varint is anything else.
+- **Unidirectional stream-type reader.** ✅ Implemented —
+  `internal.WebTransportUniStreamPrefixHandler` (the `0x54` stream type byte
+  is consumed by the HTTP/3 layer's unknown-stream-type factory; the prefix
+  handler then reads the session-ID varint).
 - **`SETTINGS_ENABLE_CONNECT_PROTOCOL` and `SETTINGS_H3_DATAGRAM` plumbing.**
-  Netty's `Http3SettingsFrame` is a generic name→value map; we surface the
-  WebTransport-relevant settings and validate them on connect.
-- **`SETTINGS_WT_MAX_SESSIONS` advertisement and enforcement.**
+  ✅ Implemented in `WebTransportServerProtocolHandler.buildSettings()`
+  (uses `Http3Settings.enableConnectProtocol(true)` /
+  `enableH3Datagram(true)`).
+- **`SETTINGS_WT_INITIAL_MAX_STREAMS_*` and `SETTINGS_WT_INITIAL_MAX_DATA`
+  advertisement.** ✅ Implemented in the same builder. Enforcement against
+  these limits on outbound streams / data is **not yet implemented** — the
+  capsule values are decoded onto the session, but
+  `WebTransportStreamChannelBootstrap` does not yet consult them. Tracked
+  under Phase 6 of the [roadmap](roadmap.md).
+
+For the full spec-to-class map see [wire-format.md](wire-format.md).
 
 ## Version compatibility matrix
 

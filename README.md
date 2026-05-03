@@ -1,14 +1,18 @@
 # netty-codec-webtransport
 
 WebTransport-over-HTTP/3 server (and, eventually, Java client) built on
-[Netty](https://netty.io). Pre-implementation; this repository currently contains
-only the project skeleton, vendored specifications, and design documents.
+[Netty](https://netty.io). The shape mirrors Netty's HTTP/2-multiplex idiom:
+each WebTransport stream is its own `QuicStreamChannel` with its own pipeline,
+datagrams arrive as `WebTransportDatagramFrame` channel reads, and session
+lifecycle fires as Netty user events.
 
 ## Status
 
-Pre-1.0 bootstrap. **No protocol code yet.** See [docs/roadmap.md](docs/roadmap.md)
-for the phased plan; the priority is a server interoperable with Chrome's
-`new WebTransport(...)` JS API.
+Pre-1.0. The codec primitives (varint, capsule), server pipeline, session API,
+per-stream child channels, and datagram routing are implemented; flow-control
+enforcement and a Java client are still pending. See
+[docs/roadmap.md](docs/roadmap.md) for the phased plan; the priority is a
+server interoperable with Chrome's `new WebTransport(...)` JS API.
 
 ## Targeting
 
@@ -51,12 +55,55 @@ mvn spotless:apply     # auto-fix Java formatting (Google Java Format)
 `spotless:check` runs as part of `verify`, so unformatted code fails the build
 locally and in CI. Run `spotless:apply` before committing.
 
+## API at a glance
+
+```java
+WebTransportServerProtocolHandler wt =
+    WebTransportServerProtocolHandler.builder()
+        .session(new WebTransportSessionInitializer() {
+            @Override protected void initSession(QuicStreamChannel ch, WebTransportSession s) {
+                ch.pipeline().addLast(new MySessionHandler());      // sees datagrams + lifecycle
+            }
+        })
+        .bidiStream(new WebTransportStreamInitializer() {
+            @Override protected void initStream(QuicStreamChannel ch, WebTransportSession s) {
+                ch.pipeline().addLast(new MyStreamHandler());       // sees raw payload ByteBufs
+            }
+        })
+        .uniStream(new WebTransportUniStreamInitializer() {
+            @Override protected void initStream(QuicStreamChannel ch, WebTransportSession s) {
+                ch.pipeline().addLast(new MyStreamHandler());
+            }
+        })
+        .build();
+
+// Add wt to a QuicChannel pipeline (typically inside a ChannelInitializer<QuicChannel>
+// passed to QuicServerCodecBuilder.handler(...)).
+```
+
+User handlers see:
+
+- **`WebTransportSessionEvent.Established` / `Draining` / `Closed`** as `userEventTriggered`
+  events on the session-channel pipeline (mirrors `WebSocketServerProtocolHandler.HandshakeComplete`).
+- **`WebTransportDatagramFrame`** as `channelRead` events on the session-channel
+  pipeline; outbound datagrams are `ctx.writeAndFlush(new WebTransportDatagramFrame(buf))`
+  on the same channel.
+- **Plain `ByteBuf`** `channelRead` events on each WebTransport stream channel —
+  the WebTransport prefix (frame type for bidi, session ID) is stripped before user
+  handlers see the data.
+
+To open a stream from the server side: `session.streamBootstrap().type(BIDIRECTIONAL).handler(...).open()`
+(mirrors `Http2StreamChannelBootstrap`).
+
+A complete runnable example is in
+[`netty-codec-webtransport-example`](netty-codec-webtransport-example/).
+
 ## Module map
 
 | Directory | Artifact | Role |
 | --- | --- | --- |
-| [`netty-codec-webtransport/`](netty-codec-webtransport/) | `netty-codec-webtransport` | The codec — frames, capsules, handlers, server, client, session API. Mirrors `netty-codec-http3`. |
-| [`netty-codec-webtransport-example/`](netty-codec-webtransport-example/) | `netty-codec-webtransport-example` | Runnable demos. Empty until the codec has a usable session API. |
+| [`netty-codec-webtransport/`](netty-codec-webtransport/) | `netty-codec-webtransport` | The codec — frames, capsules, server handlers, session API. Mirrors `netty-codec-http3`. |
+| [`netty-codec-webtransport-example/`](netty-codec-webtransport-example/) | `netty-codec-webtransport-example` | Runnable demos: `EchoServer` accepts WebTransport sessions and echoes streams + datagrams. |
 
 ## Documentation
 
@@ -68,8 +115,8 @@ locally and in CI. Run `spotless:apply` before committing.
 - [docs/project-layout.md](docs/project-layout.md) — module / package conventions
   and Maven layout rationale.
 - [docs/roadmap.md](docs/roadmap.md) — phased implementation plan.
-- [docs/wire-format.md](docs/wire-format.md) — reserved; will map codec classes
-  to spec sections once the implementation lands.
+- [docs/wire-format.md](docs/wire-format.md) — spec-to-class map: which codec
+  class implements which section of which spec.
 
 ## License
 
