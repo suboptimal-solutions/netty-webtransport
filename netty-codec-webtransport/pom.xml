@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.suboptimal-solutions</groupId>
+        <artifactId>netty-codec-webtransport-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>netty-codec-webtransport</artifactId>
+    <packaging>jar</packaging>
+
+    <name>netty-codec-webtransport</name>
+    <description>WebTransport-over-HTTP/3 codec, handlers, and session API for Netty 4.2.</description>
+
+    <dependencies>
+        <!-- HTTP/3 codec graduated into io.netty core in Netty 4.2.1.Final.
+             It transitively pulls netty-codec-quic, netty-buffer, netty-common, netty-transport. -->
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-http3</artifactId>
+        </dependency>
+
+        <!-- QUIC native binaries (Cloudflare quiche via JNI + BoringSSL).
+             The classifier is resolved at build time by os-maven-plugin in the parent POM.
+             The version must be declared explicitly: netty-bom pins the base GAV but Maven
+             will not propagate that pin onto a classifier dependency declared without a
+             version, so we reuse the BOM-managed property instead. -->
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-native-quic</artifactId>
+            <version>${netty.version}</version>
+            <classifier>${os.detected.classifier}</classifier>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Test dependencies. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <Automatic-Module-Name>io.suboptimal.netty.webtransport</Automatic-Module-Name>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

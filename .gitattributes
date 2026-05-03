@@ -1,0 +1,24 @@
+# Default to LF on text files; never let Windows checkouts inject CRLF.
+* text=auto eol=lf
+
+# Source and config files
+*.java         text eol=lf
+*.kt           text eol=lf
+*.xml          text eol=lf
+*.yml          text eol=lf
+*.yaml         text eol=lf
+*.md           text eol=lf
+*.properties   text eol=lf
+*.txt          text eol=lf
+*.sh           text eol=lf
+*.cmd          text eol=crlf
+
+# Vendored specs: keep bytes exactly as fetched so sha256 stays stable.
+specs/*.txt    -text
+specs/*.html   -text
+
+# Maven wrapper would be marked as binary if we shipped one; we do not.
+
+# Linguist hints (GitHub language stats)
+specs/* linguist-vendored
+docs/*  linguist-documentation

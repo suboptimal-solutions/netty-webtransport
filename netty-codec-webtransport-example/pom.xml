@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.suboptimal-solutions</groupId>
+        <artifactId>netty-codec-webtransport-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>netty-codec-webtransport-example</artifactId>
+    <packaging>jar</packaging>
+
+    <name>netty-codec-webtransport-example</name>
+    <description>Runnable WebTransport demos. Empty until the codec module ships a session API.</description>
+
+    <properties>
+        <skipTests>true</skipTests>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>netty-codec-webtransport</artifactId>
+        </dependency>
+    </dependencies>
+</project>

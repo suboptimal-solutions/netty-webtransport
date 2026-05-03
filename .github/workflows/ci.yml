@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (ubuntu-latest, JDK 21)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Show toolchain
+        run: |
+          mvn --version
+          java -version
+
+      - name: Build (mvn -B verify)
+        # `verify` runs the bound spotless:check, so unformatted code fails the build.
+        run: mvn -B -ntp verify
+
+      - name: Upload surefire reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: '**/target/surefire-reports/**'
+          if-no-files-found: ignore
+
+# TODO: enable macos-latest in the matrix once a real test exercises the QUIC native
+# classifier. Until the codec module ships networking code, macOS adds CI cost without
+# coverage.
