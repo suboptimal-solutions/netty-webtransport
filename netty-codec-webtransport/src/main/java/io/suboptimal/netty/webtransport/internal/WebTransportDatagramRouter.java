@@ -4,20 +4,22 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.suboptimal.netty.webtransport.VarintCodec;
+import io.suboptimal.netty.webtransport.WebTransportDatagramFrame;
 
 /**
- * Handles incoming QUIC datagrams, demuxing by quarter stream ID to the correct session.
+ * Sits on the parent {@link io.netty.handler.codec.quic.QuicChannel} pipeline and demuxes inbound
+ * QUIC datagrams to the right WebTransport session by reading the leading quarter-stream-id
+ * varint, then re-fires them as {@link WebTransportDatagramFrame} messages on the session
+ * channel's pipeline.
  *
  * <p>RFC 9297 §2.1 (HTTP/3 Datagram format), draft-ietf-webtrans-http3-15 §4.5.
- *
- * <p>Pipeline: QuicChannel → [this handler]. Receives raw datagram payloads.
  */
-public final class WebTransportDatagramHandler extends ChannelInboundHandlerAdapter {
+public final class WebTransportDatagramRouter extends ChannelInboundHandlerAdapter {
 
-    private final SessionRegistry sessionRegistry;
+    private final SessionRegistry registry;
 
-    public WebTransportDatagramHandler(SessionRegistry sessionRegistry) {
-        this.sessionRegistry = sessionRegistry;
+    public WebTransportDatagramRouter(SessionRegistry registry) {
+        this.registry = registry;
     }
 
     @Override
@@ -35,12 +37,13 @@ public final class WebTransportDatagramHandler extends ChannelInboundHandlerAdap
         long quarterStreamId = VarintCodec.readVarint(buf);
         long sessionId = quarterStreamId * 4;
 
-        DefaultWebTransportSession session = sessionRegistry.get(sessionId);
+        DefaultWebTransportSession session = registry.get(sessionId);
         if (session == null) {
             buf.release();
             return;
         }
 
-        session.sessionHandler().onDatagram(session, buf);
+        WebTransportDatagramFrame frame = new WebTransportDatagramFrame(buf);
+        session.sessionChannel().pipeline().fireChannelRead(frame);
     }
 }

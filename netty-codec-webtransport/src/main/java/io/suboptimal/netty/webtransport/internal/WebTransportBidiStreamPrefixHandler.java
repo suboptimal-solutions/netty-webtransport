@@ -7,23 +7,29 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import io.netty.handler.codec.ByteToMessageDecoder;
-import io.netty.handler.codec.quic.QuicStreamChannel;
 import io.suboptimal.netty.webtransport.VarintCodec;
+import io.suboptimal.netty.webtransport.WebTransportSession;
+import io.suboptimal.netty.webtransport.WebTransportStreamEvent;
+import io.suboptimal.netty.webtransport.WebTransportStreamInitializer;
 import java.util.List;
 
 /**
- * Sits at the head of a client-initiated bidirectional stream pipeline. Reads the first varint to
- * discriminate between a WebTransport stream (signal value 0x41) and a normal HTTP/3 request
- * stream.
+ * First-byte discriminator on a peer-initiated bidirectional QUIC stream. If the leading varint
+ * is {@code WT_STREAM} ({@code 0x41}), reads the session ID, hands the stream off to the user's
+ * {@link WebTransportStreamInitializer}, and removes the HTTP/3 handlers from the pipeline. Any
+ * other leading varint is left for the HTTP/3 layer to parse.
  *
- * <p>draft-ietf-webtrans-http3-15 §4.3.
+ * <p>draft-ietf-webtrans-http3-15 §4.2.
  */
-public final class WebTransportStreamDiscriminator extends ByteToMessageDecoder {
+public final class WebTransportBidiStreamPrefixHandler extends ByteToMessageDecoder {
 
-    private final SessionRegistry sessionRegistry;
+    private final SessionRegistry registry;
+    private final WebTransportStreamInitializer userInit;
 
-    public WebTransportStreamDiscriminator(SessionRegistry sessionRegistry) {
-        this.sessionRegistry = sessionRegistry;
+    public WebTransportBidiStreamPrefixHandler(
+            SessionRegistry registry, WebTransportStreamInitializer userInit) {
+        this.registry = registry;
+        this.userInit = userInit;
     }
 
     @Override
@@ -45,21 +51,28 @@ public final class WebTransportStreamDiscriminator extends ByteToMessageDecoder 
         }
         long sessionId = VarintCodec.readVarint(in);
 
-        DefaultWebTransportSession session = sessionRegistry.get(sessionId);
+        DefaultWebTransportSession session = registry.get(sessionId);
         if (session == null) {
             ctx.close();
             return;
         }
 
+        ctx.channel().attr(WebTransportSession.ATTR).set(session);
+
         removeHttpHandlers(ctx);
 
-        QuicStreamChannel streamChannel = (QuicStreamChannel) ctx.channel();
-        session.sessionHandler().onBidirectionalStream(session, streamChannel);
+        ChannelPipeline p = ctx.pipeline();
+        if (userInit != null) {
+            p.addLast(userInit);
+        }
+
+        ctx.fireUserEventTriggered(new WebTransportStreamEvent.Opened(session));
 
         if (in.isReadable()) {
             out.add(in.readRetainedSlice(in.readableBytes()));
         }
-        ctx.pipeline().remove(this);
+
+        p.remove(this);
     }
 
     private void removeHttpHandlers(ChannelHandlerContext ctx) {

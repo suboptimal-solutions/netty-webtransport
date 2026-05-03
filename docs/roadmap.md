@@ -116,4 +116,12 @@ Cut `1.0.0`. Begin a stability commitment for the public API.
 
 ## Status
 
-Pre-Phase-1 (bootstrap complete, no protocol code).
+Phases 1-5 implemented; Phase 6 (flow-control enforcement) stubbed but not
+enforced. The public API has been re-shaped to match Netty's HTTP/2-multiplex
+idiom: each WebTransport stream is its own `QuicStreamChannel` with an
+independent pipeline, datagrams arrive as `WebTransportDatagramFrame` events
+on the session channel, and session lifecycle fires as Netty user events
+(`WebTransportSessionEvent.Established` / `Draining` / `Closed`). The original
+callback-style `WebTransportSessionHandler` has been deleted.
+
+Up next: Phase 7 (echo example) and Phase 6 (real flow-control enforcement).
