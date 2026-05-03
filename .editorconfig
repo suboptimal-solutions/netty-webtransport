@@ -1,29 +1,33 @@
 root = true
 
 [*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
 indent_style = space
 indent_size = 4
-end_of_line = lf
-charset = utf-8
-trim_trailing_whitespace = true
-insert_final_newline = true
-max_line_length = 120
 
 [*.java]
-# Google Java Format wraps at 100; keep .editorconfig in lockstep so
-# IDE-formatted lines don't get rewritten by Spotless.
+indent_size = 4
 max_line_length = 100
 
-[*.md]
-trim_trailing_whitespace = false
+[*.proto]
+indent_size = 4
 
-[*.{xml,yml,yaml,json}]
+[*.xml]
+indent_size = 4
+
+[*.md]
+indent_size = 2
+trim_trailing_whitespace = false
+max_line_length = 120
+
+[*.json]
 indent_size = 2
 
-[Makefile]
-indent_style = tab
+[*.{yml,yaml}]
+indent_size = 2
 
-[specs/*.{txt,html}]
-trim_trailing_whitespace = false
-insert_final_newline = false
-max_line_length = off
+[{Makefile,makefile}]
+indent_style = tab

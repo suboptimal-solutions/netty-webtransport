@@ -11,13 +11,10 @@
     </parent>
 
     <artifactId>netty-codec-webtransport-example</artifactId>
-    <!-- pom-packaging while no sources exist; flip to jar when demos land
-         (roadmap phase 7). Avoids running compile/surefire/jar/spotless
-         lifecycles against an empty src tree on every build. -->
-    <packaging>pom</packaging>
+    <packaging>jar</packaging>
 
     <name>netty-codec-webtransport-example</name>
-    <description>Runnable WebTransport demos. Empty until the codec module ships a session API.</description>
+    <description>Runnable WebTransport demos.</description>
 
     <properties>
         <maven.deploy.skip>true</maven.deploy.skip>
@@ -27,6 +24,12 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>netty-codec-webtransport</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-native-quic</artifactId>
+            <classifier>${os.detected.classifier}</classifier>
+            <scope>runtime</scope>
         </dependency>
     </dependencies>
 </project>
