@@ -34,8 +34,6 @@ public final class WebTransportUniStreamHandler extends ByteToMessageDecoder {
             return;
         }
 
-        session.incrementOpenedStreamsUni();
-
         QuicStreamChannel streamChannel = (QuicStreamChannel) ctx.channel();
         session.sessionHandler().onUnidirectionalStream(session, streamChannel);
 

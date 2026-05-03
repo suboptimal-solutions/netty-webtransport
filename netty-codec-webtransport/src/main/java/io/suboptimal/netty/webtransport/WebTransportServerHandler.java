@@ -23,6 +23,9 @@ import java.util.function.Supplier;
  */
 public final class WebTransportServerHandler extends Http3RequestStreamInboundHandler {
 
+    private static final AsciiString STATUS_OK = AsciiString.cached("200");
+    private static final AsciiString STATUS_NOT_FOUND = AsciiString.cached("404");
+
     private final SessionRegistry sessionRegistry;
     private final Supplier<WebTransportSessionHandler> sessionHandlerFactory;
     private DefaultWebTransportSession session;
@@ -41,7 +44,8 @@ public final class WebTransportServerHandler extends Http3RequestStreamInboundHa
 
         if (!AsciiString.contentEqualsIgnoreCase(METHOD_CONNECT, method)
                 || !AsciiString.contentEqualsIgnoreCase(UPGRADE_TOKEN, protocol)) {
-            sendResponse(ctx, "404");
+            sendResponse(ctx, STATUS_NOT_FOUND);
+            ctx.close();
             return;
         }
 
@@ -54,7 +58,7 @@ public final class WebTransportServerHandler extends Http3RequestStreamInboundHa
                 new DefaultWebTransportSession(sessionId, quicChannel, connectStream, handler);
         sessionRegistry.register(session);
 
-        sendResponse(ctx, "200");
+        sendResponse(ctx, STATUS_OK);
 
         handler.onSessionEstablished(session);
     }
@@ -105,7 +109,7 @@ public final class WebTransportServerHandler extends Http3RequestStreamInboundHa
         }
     }
 
-    private void sendResponse(ChannelHandlerContext ctx, String status) {
+    private void sendResponse(ChannelHandlerContext ctx, AsciiString status) {
         DefaultHttp3HeadersFrame response = new DefaultHttp3HeadersFrame();
         response.headers().status(status);
         ctx.writeAndFlush(response);

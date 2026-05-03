@@ -29,14 +29,12 @@ import java.util.function.Supplier;
 public final class WebTransportServerConnectionHandler extends ChannelInboundHandlerAdapter {
 
     private final Supplier<WebTransportSessionHandler> sessionHandlerFactory;
-    private final long maxSessions;
     private final long initialMaxStreamsUni;
     private final long initialMaxStreamsBidi;
     private final long initialMaxData;
 
     private WebTransportServerConnectionHandler(Builder builder) {
         this.sessionHandlerFactory = builder.sessionHandlerFactory;
-        this.maxSessions = builder.maxSessions;
         this.initialMaxStreamsUni = builder.initialMaxStreamsUni;
         this.initialMaxStreamsBidi = builder.initialMaxStreamsBidi;
         this.initialMaxData = builder.initialMaxData;
@@ -110,7 +108,6 @@ public final class WebTransportServerConnectionHandler extends ChannelInboundHan
 
     public static final class Builder {
         private Supplier<WebTransportSessionHandler> sessionHandlerFactory;
-        private long maxSessions = 1;
         private long initialMaxStreamsUni = 100;
         private long initialMaxStreamsBidi = 100;
         private long initialMaxData = 1_048_576;
@@ -120,11 +117,6 @@ public final class WebTransportServerConnectionHandler extends ChannelInboundHan
         public Builder sessionHandlerFactory(
                 Supplier<WebTransportSessionHandler> sessionHandlerFactory) {
             this.sessionHandlerFactory = sessionHandlerFactory;
-            return this;
-        }
-
-        public Builder maxSessions(long maxSessions) {
-            this.maxSessions = maxSessions;
             return this;
         }
 

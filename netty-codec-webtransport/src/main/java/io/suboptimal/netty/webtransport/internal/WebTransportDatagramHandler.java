@@ -41,7 +41,6 @@ public final class WebTransportDatagramHandler extends ChannelInboundHandlerAdap
             return;
         }
 
-        // zero-copy: pass the remaining slice as the payload
         session.sessionHandler().onDatagram(session, buf);
     }
 }

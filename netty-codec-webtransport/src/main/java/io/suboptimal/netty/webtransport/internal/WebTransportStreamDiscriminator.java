@@ -7,6 +7,7 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import io.netty.handler.codec.ByteToMessageDecoder;
+import io.netty.handler.codec.quic.QuicStreamChannel;
 import io.suboptimal.netty.webtransport.VarintCodec;
 import java.util.List;
 
@@ -34,7 +35,7 @@ public final class WebTransportStreamDiscriminator extends ByteToMessageDecoder 
 
         if (signalValue != WT_STREAM_FRAME_TYPE) {
             in.resetReaderIndex();
-            removeAndPassThrough(ctx);
+            ctx.pipeline().remove(this);
             return;
         }
 
@@ -50,20 +51,14 @@ public final class WebTransportStreamDiscriminator extends ByteToMessageDecoder 
             return;
         }
 
-        session.incrementOpenedStreamsBidi();
         removeHttpHandlers(ctx);
 
-        io.netty.handler.codec.quic.QuicStreamChannel streamChannel =
-                (io.netty.handler.codec.quic.QuicStreamChannel) ctx.channel();
+        QuicStreamChannel streamChannel = (QuicStreamChannel) ctx.channel();
         session.sessionHandler().onBidirectionalStream(session, streamChannel);
 
         if (in.isReadable()) {
             out.add(in.readRetainedSlice(in.readableBytes()));
         }
-        ctx.pipeline().remove(this);
-    }
-
-    private void removeAndPassThrough(ChannelHandlerContext ctx) {
         ctx.pipeline().remove(this);
     }
 

@@ -29,9 +29,7 @@ public final class CapsuleCodec {
             cumulation = alloc.compositeBuffer();
         }
         cumulation.addComponent(true, data.retain());
-        while (decodeCapsule(cumulation, out)) {
-            // keep decoding
-        }
+        while (decodeCapsule(cumulation, out)) {}
         discardReadComponents();
         return out;
     }
