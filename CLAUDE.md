@@ -25,9 +25,14 @@ the same commit.**
   (session channel, per-stream child channels, datagram frames).
 - [`netty-codec-webtransport-tests/`](netty-codec-webtransport-tests/) —
   browser interop tests driven by Playwright Java + Chromium. Skipped by
-  default; activate with `mvn -P integration verify`. Currently the
-  handshake fails on the JS side (`Opening handshake failed`); the harness
-  is in place and the wire-level fix is the next concrete task.
+  default; activate with `mvn -P integration verify`. Six round-trip cases
+  (bidi/uni/datagram, server-initiated bidi, clean close with code+reason,
+  drain) are green against current Chromium. Wire-level gotchas the bring-up
+  exposed — multi-draft SETTINGS, draft-02 response-header echo, Netty's
+  silent non-standard-SETTINGS drop, double `Http3FrameCodec` install when
+  using `Http3RequestStreamInitializer` — are catalogued in
+  [`docs/browser-interop.md`](docs/browser-interop.md). **Read that first
+  when an interop test starts failing.**
 
 ## Architecture in one paragraph
 
@@ -107,17 +112,16 @@ requirements, and the no-wrapper decision live in [README.md](README.md) and
 
 ## What's next
 
-See [docs/roadmap.md](docs/roadmap.md). Phases 1-5 and 7 are implemented.
-Phase 8 (browser interop) has its harness in `netty-codec-webtransport-tests`
-but the actual handshake is not yet succeeding — that is the most concrete
-next task. After that: Phase 6 (real flow-control enforcement; capsules are
-parsed and stored on `DefaultWebTransportSession` but limits aren't yet
-enforced on outbound streams/data). Phase 9 (Java client) is still
+See [docs/roadmap.md](docs/roadmap.md). Phases 1-5, 7, and 8 are implemented.
+Phase 6 (real flow-control enforcement — capsules are parsed and stored on
+`DefaultWebTransportSession` but limits aren't yet enforced on outbound
+streams/data) is the next concrete task. Phase 9 (Java client) is still
 untouched.
 
-To debug the Phase 8 handshake failure, run with the headed flag and open
-DevTools → Network → look at the WebTransport row for the actual rejection
-reason; also check `chrome://net-internals/#quic`:
+If a browser interop test starts failing, the diagnostic playbook is in
+[docs/browser-interop.md](docs/browser-interop.md#debugging-a-future-regression).
+Quick path: rerun headed with DevTools open and inspect
+`chrome://net-internals/#events` for the actual rejection reason:
 
 ```sh
 mvn -B -P integration -Dpw.headed=true -Dpw.devtools=true -pl netty-codec-webtransport-tests test

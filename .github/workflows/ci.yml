@@ -41,3 +41,50 @@ jobs:
           name: surefire-reports
           path: '**/target/surefire-reports/**'
           if-no-files-found: ignore
+
+  integration:
+    name: integration (browser interop)
+    runs-on: ubuntu-latest
+    # Run after build on the same commit so a broken unit-test build doesn't waste
+    # the slower integration job's Chromium download.
+    needs: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          # Bump on Playwright version changes — see netty-codec-webtransport-tests/pom.xml.
+          key: ${{ runner.os }}-playwright-1.59.0
+          restore-keys: ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browsers + system deps
+        # Resolves the Playwright jar onto the local repo, then runs its CLI to download
+        # Chromium and `apt-get install` the system libraries Chromium needs (libnss3 etc.).
+        run: |
+          mvn -B -ntp -pl netty-codec-webtransport-tests -am test-compile
+          mvn -B -ntp -pl netty-codec-webtransport-tests dependency:build-classpath \
+              -Dmdep.outputFile=cp.txt -Dmdep.includeScope=test
+          java -cp "$(cat netty-codec-webtransport-tests/cp.txt)" \
+              com.microsoft.playwright.CLI install --with-deps chromium
+
+      - name: Browser interop tests
+        run: mvn -B -ntp -V -P integration verify
+
+      - name: Upload surefire reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-surefire-reports
+          path: '**/target/surefire-reports/**'
+          if-no-files-found: ignore

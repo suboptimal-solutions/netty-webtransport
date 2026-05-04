@@ -3,6 +3,7 @@ package io.suboptimal.netty.webtransport.internal;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelPipeline;
 import io.suboptimal.netty.webtransport.VarintCodec;
 import io.suboptimal.netty.webtransport.WebTransportDatagramFrame;
 
@@ -44,6 +45,17 @@ public final class WebTransportDatagramRouter extends ChannelInboundHandlerAdapt
         }
 
         WebTransportDatagramFrame frame = new WebTransportDatagramFrame(buf);
-        session.sessionChannel().pipeline().fireChannelRead(frame);
+        // Fire from `wt-session-out` so the frame is delivered straight to user handlers,
+        // skipping the HTTP/3 frame codec at the head of the session pipeline (the codec only
+        // understands ByteBuf / QuicStreamFrame and would crash on a WebTransport frame type).
+        ChannelPipeline p = session.sessionChannel().pipeline();
+        ChannelHandlerContext deliverFrom = p.context("wt-session-out");
+        if (deliverFrom == null) {
+            // Session not fully initialized yet; drop. Retaining/queueing isn't worth the
+            // complexity — the peer will retransmit at a higher layer if needed.
+            frame.release();
+            return;
+        }
+        deliverFrom.fireChannelRead(frame);
     }
 }

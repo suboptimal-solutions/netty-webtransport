@@ -1,17 +1,19 @@
 package io.suboptimal.netty.webtransport;
 
 import static io.suboptimal.netty.webtransport.WebTransportProtocol.SETTINGS_WT_ENABLED;
+import static io.suboptimal.netty.webtransport.WebTransportProtocol.SETTINGS_WT_ENABLED_DRAFT02;
 import static io.suboptimal.netty.webtransport.WebTransportProtocol.SETTINGS_WT_INITIAL_MAX_DATA;
 import static io.suboptimal.netty.webtransport.WebTransportProtocol.SETTINGS_WT_INITIAL_MAX_STREAMS_BIDI;
 import static io.suboptimal.netty.webtransport.WebTransportProtocol.SETTINGS_WT_INITIAL_MAX_STREAMS_UNI;
+import static io.suboptimal.netty.webtransport.WebTransportProtocol.SETTINGS_WT_MAX_SESSIONS_DRAFT07;
 import static io.suboptimal.netty.webtransport.WebTransportProtocol.WT_UNI_STREAM_TYPE;
 
 import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.handler.codec.http3.DefaultHttp3SettingsFrame;
-import io.netty.handler.codec.http3.Http3RequestStreamInitializer;
 import io.netty.handler.codec.http3.Http3ServerConnectionHandler;
 import io.netty.handler.codec.http3.Http3Settings;
 import io.netty.handler.codec.http3.Http3SettingsFrame;
@@ -30,8 +32,14 @@ import io.suboptimal.netty.webtransport.internal.WebTransportUniStreamPrefixHand
  * handler, and the datagram router. Successful CONNECT handshakes promote the request stream into
  * a session channel and run the user-supplied {@link WebTransportSessionInitializer}.
  *
+ * <p>The handler is {@link Sharable}: build it once and install it on every accepted
+ * {@link QuicChannel} via {@code QuicServerCodecBuilder.handler(...)}. All per-channel state is
+ * constructed inside {@link #handlerAdded(ChannelHandlerContext)}; the instance fields are
+ * immutable configuration.
+ *
  * <p>draft-ietf-webtrans-http3-15 §3.1.
  */
+@Sharable
 public final class WebTransportServerProtocolHandler extends ChannelInboundHandlerAdapter {
 
     private final WebTransportSessionInitializer sessionInit;
@@ -55,10 +63,18 @@ public final class WebTransportServerProtocolHandler extends ChannelInboundHandl
         SessionRegistry registry = new SessionRegistry();
         Http3SettingsFrame settings = buildSettings();
 
-        Http3RequestStreamInitializer requestInit =
-                new Http3RequestStreamInitializer() {
+        // Plain ChannelInitializer, NOT Http3RequestStreamInitializer.
+        // Http3ServerConnectionHandler.initBidirectionalStream already installs Http3FrameCodec,
+        // encode/decode state validators, and Http3RequestStreamValidationHandler before invoking
+        // this initializer. Http3RequestStreamInitializer.initChannel installs the same set, so
+        // using it here would put two copies of every HTTP/3 handler in the stream pipeline; the
+        // second copy then sees already-decoded frames and explodes with ClassCastException
+        // (Http3HeadersFrame -> ByteBuf). All we need is to attach our pre-codec discriminator
+        // and post-codec CONNECT handler.
+        ChannelInitializer<QuicStreamChannel> requestInit =
+                new ChannelInitializer<QuicStreamChannel>() {
                     @Override
-                    protected void initRequestStream(QuicStreamChannel ch) {
+                    protected void initChannel(QuicStreamChannel ch) {
                         ch.pipeline()
                                 .addFirst(
                                         "wt-bidi-prefix",
@@ -84,18 +100,36 @@ public final class WebTransportServerProtocolHandler extends ChannelInboundHandl
                         null,
                         streamType -> streamType == WT_UNI_STREAM_TYPE ? uniStreamFactory : null,
                         settings,
-                        true);
+                        true,
+                        ACCEPT_NON_STANDARD_SETTINGS);
 
         ctx.pipeline().addAfter(ctx.name(), "http3", http3Handler);
         ctx.pipeline()
                 .addAfter("http3", "wt-datagram", new WebTransportDatagramRouter(registry));
     }
 
+    // Netty's default validator silently drops any non-standard SETTINGS — including every
+    // WebTransport codepoint we need on the wire. Replace it with one that accepts any
+    // non-HTTP/2-reserved id, on both the outbound (our SETTINGS to the peer) and inbound
+    // (peer SETTINGS we receive) directions.
+    private static final Http3Settings.NonStandardHttp3SettingsValidator
+            ACCEPT_NON_STANDARD_SETTINGS = (id, value) -> true;
+
     private Http3SettingsFrame buildSettings() {
-        Http3Settings settings = Http3Settings.defaultSettings();
+        Http3Settings settings = new Http3Settings(ACCEPT_NON_STANDARD_SETTINGS);
+        settings.qpackMaxTableCapacity(0);
+        settings.qpackBlockedStreams(0);
         settings.enableConnectProtocol(true);
         settings.enableH3Datagram(true);
         settings.put(SETTINGS_WT_ENABLED, 1L);
+        // Advertise draft-02 and draft-07 alongside draft-15 so QUICHE-based peers (Chrome,
+        // current production browsers) can negotiate WebTransport. Chrome ships kDraft02
+        // by default and gates kDraft07 behind a feature flag, so draft-02 is what actually
+        // unblocks browser interop. See §7.1 ("Negotiating the Draft Version") of draft-15.
+        settings.put(SETTINGS_WT_ENABLED_DRAFT02, 1L);
+        settings.put(
+                SETTINGS_WT_MAX_SESSIONS_DRAFT07,
+                initialMaxStreamsBidi > 0 ? initialMaxStreamsBidi : 1L);
         if (initialMaxStreamsUni > 0) {
             settings.put(SETTINGS_WT_INITIAL_MAX_STREAMS_UNI, initialMaxStreamsUni);
         }

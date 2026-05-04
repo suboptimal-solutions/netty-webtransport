@@ -15,6 +15,12 @@ public final class WebTransportProtocol {
 
     public static final AsciiString UPGRADE_TOKEN = AsciiString.cached("webtransport-h3");
 
+    // Legacy upgrade token used by drafts -02 through -07. Current Chromium / QUICHE
+    // (as of Chrome 147) ships these drafts only, so we accept either token on the
+    // server side until browsers catch up to draft-15. See §7.1 ("Negotiating the
+    // Draft Version") for the multi-version interop story.
+    public static final AsciiString UPGRADE_TOKEN_DRAFT07 = AsciiString.cached("webtransport");
+
     // --- HTTP/3 SETTINGS (§9.2) ---
 
     public static final long SETTINGS_WT_ENABLED = 0x2c7cf000L;
@@ -23,6 +29,19 @@ public final class WebTransportProtocol {
     public static final long SETTINGS_WT_INITIAL_MAX_STREAMS_UNI = 0x2b64L;
     public static final long SETTINGS_WT_INITIAL_MAX_STREAMS_BIDI = 0x2b65L;
     public static final long SETTINGS_WT_INITIAL_MAX_DATA = 0x2b61L;
+
+    // Draft-02 SETTINGS_ENABLE_WEBTRANSPORT — required for Chromium's default code path:
+    // QUICHE supports both draft-02 and draft-07, but Chrome's
+    // DedicatedWebTransportHttp3ClientSession gates draft-07 behind the
+    // kEnableWebTransportDraft07 feature flag, so without this flag the only version
+    // Chrome will negotiate is draft-02. Sending all three codepoints lets a single
+    // server speak to draft-02 / draft-07 / draft-15 peers without configuration.
+    public static final long SETTINGS_WT_ENABLED_DRAFT02 = 0x2b603742L;
+
+    // Draft-07 SETTINGS_WEBTRANSPORT_MAX_SESSIONS — value is the max-concurrent-sessions
+    // count rather than draft-15's boolean. Sent alongside SETTINGS_WT_ENABLED so a
+    // QUICHE-based peer (Chrome) can negotiate WebTransport via its draft-07 codepath.
+    public static final long SETTINGS_WT_MAX_SESSIONS_DRAFT07 = 0xc671706aL;
 
     // --- Frame type (§9.3) ---
 

@@ -114,6 +114,9 @@ class EchoServerInteropTest {
                                         .setContentType("text/html; charset=utf-8")
                                         .setBody(htmlContent)));
         page = context.newPage();
+        // 15s default beats Playwright's 30s default; keeps a hung test from sitting on the JS
+        // promise indefinitely if a future server-side regression breaks the handshake.
+        page.setDefaultTimeout(15_000);
         page.onConsoleMessage(
                 msg -> System.err.println("[browser." + msg.type() + "] " + msg.text()));
         page.onPageError(err -> System.err.println("[browser.error] " + err));

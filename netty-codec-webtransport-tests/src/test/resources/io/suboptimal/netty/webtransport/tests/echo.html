@@ -48,16 +48,26 @@ window.connect = async ({ url, certHash }) => {
             }]
         });
         phase = "ready";
-        await wt.ready;
+        // Race wt.ready against an explicit deadline so the test fails fast with a clear
+        // error instead of hanging on a Playwright default timeout when something is wrong
+        // server-side.
+        await Promise.race([
+            wt.ready,
+            new Promise((_, rej) => setTimeout(() => rej(new Error("wt.ready 8s timeout")), 8000))
+        ]);
         log("connected: " + url);
         return { ok: true };
     } catch (e) {
         let closedInfo = null;
         if (wt) {
             try {
-                closedInfo = await wt.closed.catch(c => ({
-                    closeCode: c.closeCode, reason: c.reason, message: String(c)
-                }));
+                // wt.closed sometimes never settles on broken handshakes — bound it.
+                closedInfo = await Promise.race([
+                    wt.closed.then(
+                        v => ({ closeCode: v && v.closeCode, reason: v && v.reason }),
+                        c => ({ closeCode: c && c.closeCode, reason: c && c.reason, message: String(c) })),
+                    new Promise(resolve => setTimeout(() => resolve({ message: "wt.closed 2s timeout" }), 2000))
+                ]);
             } catch (_) {}
         }
         return {
@@ -71,15 +81,25 @@ window.connect = async ({ url, certHash }) => {
     }
 };
 
-window.echoBidi = async (text) => {
+// Wrap any test promise with a deadline so a server-side regression doesn't hang the test
+// runner indefinitely. Default 8s — enough for a real round-trip on loopback, fast enough
+// to fail the test cleanly when something is wrong.
+function withDeadline(promise, label, ms = 8000) {
+    return Promise.race([
+        promise,
+        new Promise((_, rej) => setTimeout(() => rej(new Error(label + " " + ms + "ms timeout")), ms))
+    ]);
+}
+
+window.echoBidi = (text) => withDeadline((async () => {
     const stream = await wt.createBidirectionalStream();
     const writer = stream.writable.getWriter();
     await writer.write(new TextEncoder().encode(text));
     await writer.close();
     return await readAllText(stream.readable.getReader());
-};
+})(), "echoBidi");
 
-window.echoUni = async (text) => {
+window.echoUni = (text) => withDeadline((async () => {
     const writable = await wt.createUnidirectionalStream();
     const writer = writable.getWriter();
     await writer.write(new TextEncoder().encode(text));
@@ -88,9 +108,9 @@ window.echoUni = async (text) => {
     const { value: replyStream } = await reader.read();
     reader.releaseLock();
     return await readAllText(replyStream.getReader());
-};
+})(), "echoUni");
 
-window.echoDatagram = async (text) => {
+window.echoDatagram = (text) => withDeadline((async () => {
     const writer = wt.datagrams.writable.getWriter();
     await writer.write(new TextEncoder().encode(text));
     writer.releaseLock();
@@ -98,7 +118,7 @@ window.echoDatagram = async (text) => {
     const { value } = await reader.read();
     reader.releaseLock();
     return new TextDecoder().decode(value);
-};
+})(), "echoDatagram");
 
 window.observeIncomingBidi = async () => {
     const reader = wt.incomingBidirectionalStreams.getReader();

@@ -10,6 +10,7 @@ Index of design and reference docs for `netty-codec-webtransport`.
 | [project-layout.md](project-layout.md) | Module / package conventions, Maven layout rationale, formatting and licensing policy. |
 | [roadmap.md](roadmap.md) | Phased implementation plan. Server-first; the priority client is the browser via the W3C WebTransport JS API. |
 | [wire-format.md](wire-format.md) | Spec-to-class map: which codec class implements which section of which spec. |
+| [browser-interop.md](browser-interop.md) | What current Chromium actually expects on the wire (vs the spec target), the eight concrete bugs we hit during Phase 8 bring-up, and how to debug a future regression. **Read first when a browser interop test starts failing.** |
 
 For non-doc context:
 

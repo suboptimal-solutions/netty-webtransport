@@ -121,13 +121,11 @@ mvn -B verify -P integration -Dpw.headed=true -Dpw.slowmo=500      # 500 ms slow
 CI runs the integration job in parallel with the unit-test job in
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 
-**Status:** harness is in place; the actual handshake currently fails on the
-JS side with `WebTransportError: Opening handshake failed.` and no UDP
-traffic reaches the server. Likely root cause is either the self-signed cert
-not satisfying Chromium's `serverCertificateHashes` requirements (algorithm,
-key size, validity, or extensions) or a Chromium policy that rejects the
-test setup. Debugging requires inspecting `chrome://net-internals` in headed
-mode — that's the next concrete task.
+**Status:** all six tests green. Bring-up turned up eight concrete wire-level
+bugs ranging from a silent Netty SETTINGS-validator drop to a Chromium-only
+draft-02 response-header echo requirement; root causes and fixes are
+catalogued in [browser-interop.md](browser-interop.md). The cert-trust path
+is the W3C `serverCertificateHashes` JS option (no Chromium-flag bypasses).
 
 ## Phase 9 — Java client handler
 
@@ -148,17 +146,18 @@ Cut `1.0.0`. Begin a stability commitment for the public API.
 
 ## Status
 
-Phases 1-5 implemented; Phase 6 (flow-control enforcement) stubbed but not
-enforced. Phase 7 (echo example) lives in `netty-codec-webtransport-example`.
-Phase 8 (browser interop) harness lives in `netty-codec-webtransport-tests`
-with six wired test cases; the handshake itself does not yet succeed and
-needs Chromium-side debugging. Phase 9 (Java client) is untouched.
+Phases 1-5, 7, and 8 implemented. Phase 6 (flow-control enforcement) is
+stubbed but not enforced. Phase 9 (Java client) is untouched.
 
-The public API has been re-shaped to match Netty's HTTP/2-multiplex idiom:
-each WebTransport stream is its own `QuicStreamChannel` with an independent
-pipeline, datagrams arrive as `WebTransportDatagramFrame` events on the
-session channel, and session lifecycle fires as Netty user events
+The public API matches Netty's HTTP/2-multiplex idiom: each WebTransport
+stream is its own `QuicStreamChannel` with an independent pipeline, datagrams
+arrive as `WebTransportDatagramFrame` events on the session channel, and
+session lifecycle fires as Netty user events
 (`WebTransportSessionEvent.Established` / `Draining` / `Closed`).
 
-Up next: Phase 8 — make the existing six interop tests pass, then Phase 6
-(real flow-control enforcement).
+The browser-interop suite (Phase 8) is green against Chromium 147 with
+multi-draft SETTINGS negotiation per spec §7.1; see
+[browser-interop.md](browser-interop.md) for the wire-level details and the
+list of bugs the bring-up exposed.
+
+Up next: Phase 6 (real flow-control enforcement), then Phase 9 (Java client).

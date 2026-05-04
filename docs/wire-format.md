@@ -21,13 +21,13 @@ The vendored specs live in [`../specs/`](../specs/).
 | `Capsule.DataBlocked` | [`draft-ietf-webtrans-http3-15.txt` §5.6](../specs/draft-ietf-webtrans-http3-15.txt) — `WT_DATA_BLOCKED`. |
 | `Capsule.Unknown` | Catch-all for unknown capsule types (RFC 9297 §3.2 forward-compat rule). |
 | `CapsuleCodec` | [`rfc9297.txt` §3.2](../specs/rfc9297.txt) — stateful decoder over a `CompositeByteBuf`; handles partial frames inside HTTP/3 DATA. |
-| `WebTransportProtocol` | [`draft-ietf-webtrans-http3-15.txt` §9](../specs/draft-ietf-webtrans-http3-15.txt) — constants (SETTINGS keys, frame types, stream types, error codes, capsule type IDs, the WT-to-HTTP error-code mapping in §4.4). |
+| `WebTransportProtocol` | [`draft-ietf-webtrans-http3-15.txt` §9](../specs/draft-ietf-webtrans-http3-15.txt) — constants (SETTINGS keys, frame types, stream types, error codes, capsule type IDs, the WT-to-HTTP error-code mapping in §4.4). Also carries the legacy draft-02 / draft-07 SETTINGS codepoints and upgrade tokens we advertise alongside the draft-15 set so current browsers can negotiate; the rationale and the per-draft mapping are in [browser-interop.md](browser-interop.md#tldr--what-browsers-expect-today). |
 
 ## Public handler / API surface
 
 | Class | Spec |
 | --- | --- |
-| `WebTransportServerProtocolHandler` | [`draft-ietf-webtrans-http3-15.txt` §3.1](../specs/draft-ietf-webtrans-http3-15.txt) — advertises `SETTINGS_ENABLE_CONNECT_PROTOCOL`, `SETTINGS_H3_DATAGRAM`, `SETTINGS_WT_ENABLED`, optional `WT_INITIAL_MAX_STREAMS_*` / `WT_INITIAL_MAX_DATA`. Wires the HTTP/3 codec, the per-stream prefix handlers, and the datagram router. |
+| `WebTransportServerProtocolHandler` | [`draft-ietf-webtrans-http3-15.txt` §3.1](../specs/draft-ietf-webtrans-http3-15.txt) — advertises `SETTINGS_ENABLE_CONNECT_PROTOCOL`, `SETTINGS_H3_DATAGRAM`, `SETTINGS_WT_ENABLED` plus the legacy `SETTINGS_WT_ENABLED_DRAFT02` / `SETTINGS_WT_MAX_SESSIONS_DRAFT07` for multi-version interop ([§7.1](../specs/draft-ietf-webtrans-http3-15.txt)), optional `WT_INITIAL_MAX_STREAMS_*` / `WT_INITIAL_MAX_DATA`. Wires the HTTP/3 codec with a permissive non-standard-SETTINGS validator, the per-stream prefix handlers, and the datagram router. |
 | `WebTransportSession` (interface) | [`draft-ietf-webtrans-http3-15.txt` §3.2](../specs/draft-ietf-webtrans-http3-15.txt). |
 | `WebTransportSessionInitializer` | Initializer for the CONNECT request stream (= "session channel"). |
 | `WebTransportStreamInitializer` | Initializer for peer-initiated WebTransport bidirectional streams. [`draft-15` §4.2](../specs/draft-ietf-webtrans-http3-15.txt). |
@@ -43,7 +43,7 @@ The vendored specs live in [`../specs/`](../specs/).
 | --- | --- |
 | `internal.SessionRegistry` | Map `session_id → session`. Used by the prefix handlers and the datagram router for O(1) lookup. |
 | `internal.DefaultWebTransportSession` | Implements the `WebTransportSession` interface. Owns the `CapsuleCodec` and the flow-control state knobs. [`draft-15` §3.2 + §5](../specs/draft-ietf-webtrans-http3-15.txt). |
-| `internal.WebTransportConnectHandler` | Validates `:method = CONNECT` + `:protocol = webtransport-h3`, sends 200 / 404, registers session. [`rfc9220.txt`](../specs/rfc9220.txt) (extended CONNECT) + [`draft-15` §3.2](../specs/draft-ietf-webtrans-http3-15.txt). |
+| `internal.WebTransportConnectHandler` | Validates `:method = CONNECT` + `:protocol = webtransport-h3` *or* `webtransport` (legacy drafts), sends 200 / 404, registers session. Echoes `Sec-Webtransport-Http3-Draft: draft02` on the response when the client offered `Sec-Webtransport-Http3-Draft02: 1` (draft-02 §3.3). [`rfc9220.txt`](../specs/rfc9220.txt) (extended CONNECT) + [`draft-15` §3.2](../specs/draft-ietf-webtrans-http3-15.txt). |
 | `internal.WebTransportSessionHandler` | Steady-state inbound handler on the session channel. Decodes capsules from `Http3DataFrame`, applies flow-control state to the session, fires `WebTransportSessionEvent.Closed` / `Draining`. [`rfc9297.txt` §3.2](../specs/rfc9297.txt) + [`draft-15` §5.6, §6](../specs/draft-ietf-webtrans-http3-15.txt). |
 | `internal.WebTransportSessionDatagramOutboundHandler` | Outbound interceptor on the session channel. Converts `WebTransportDatagramFrame` writes into varint-prefixed datagrams on the parent QuicChannel. [`rfc9297.txt` §2.1](../specs/rfc9297.txt) + [`draft-15` §4.5](../specs/draft-ietf-webtrans-http3-15.txt). |
 | `internal.WebTransportBidiStreamPrefixHandler` | First-byte discriminator on every accepted bidi request stream. If the leading varint is `WT_STREAM` (0x41), reads session ID, removes the HTTP/3 handlers, runs the user's bidi stream initializer; otherwise leaves the stream for HTTP/3 to handle. [`draft-15` §4.2](../specs/draft-ietf-webtrans-http3-15.txt). |

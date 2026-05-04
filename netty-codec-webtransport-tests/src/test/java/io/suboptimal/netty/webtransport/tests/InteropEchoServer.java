@@ -4,7 +4,6 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -311,6 +310,8 @@ final class InteropEchoServer implements AutoCloseable {
             this.session = session;
         }
 
+        private boolean replied;
+
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
             if (msg instanceof ByteBuf buf) {
@@ -326,12 +327,29 @@ final class InteropEchoServer implements AutoCloseable {
         }
 
         @Override
+        public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
+            // Reply as soon as the peer finishes writing (FIN). Waiting for channelInactive
+            // races against session teardown when the client also closes the session stream
+            // immediately afterwards (Chromium does this in draft-02).
+            if (evt instanceof io.netty.channel.socket.ChannelInputShutdownEvent) {
+                sendReply();
+            }
+            ctx.fireUserEventTriggered(evt);
+        }
+
+        @Override
         public void channelInactive(ChannelHandlerContext ctx) {
+            sendReply();
+            ctx.fireChannelInactive();
+        }
+
+        private void sendReply() {
+            if (replied) return;
+            replied = true;
             String text = accumulator.toString(StandardCharsets.UTF_8);
             observations.add(new Observation.StreamPayload(session.sessionId(), text));
 
-            ByteBuf reply =
-                    Unpooled.copiedBuffer(text, StandardCharsets.UTF_8);
+            ByteBuf reply = Unpooled.copiedBuffer(text, StandardCharsets.UTF_8);
             session.streamBootstrap()
                     .type(QuicStreamType.UNIDIRECTIONAL)
                     .open()
@@ -339,14 +357,12 @@ final class InteropEchoServer implements AutoCloseable {
                             (Future<QuicStreamChannel> f) -> {
                                 if (f.isSuccess()) {
                                     QuicStreamChannel ch = f.getNow();
-                                    ChannelFuture write = ch.writeAndFlush(reply);
-                                    write.addListener(g -> ch.shutdownOutput());
+                                    ch.writeAndFlush(reply).addListener(g -> ch.shutdownOutput());
                                 } else {
                                     reply.release();
                                 }
                             });
             accumulator.release();
-            ctx.fireChannelInactive();
         }
     }
 }

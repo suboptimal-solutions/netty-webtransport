@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(unzip -l *)",
+      "Bash(unzip -o *)",
+      "Bash(jar tf *)",
+      "Bash(javap *)",
+      "Bash(mkdir -p /tmp/*)",
+      "Bash(/usr/libexec/java_home *)",
+      "Bash(cd /tmp/* && javap *)",
+      "Bash(cd /tmp/* && unzip *)",
+      "Bash(mkdir -p /tmp/* && cd /tmp/* && unzip *)"
+    ]
+  }
+}

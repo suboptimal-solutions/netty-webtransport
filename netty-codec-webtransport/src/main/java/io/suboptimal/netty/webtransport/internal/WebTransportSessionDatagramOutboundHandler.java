@@ -37,8 +37,20 @@ public final class WebTransportSessionDatagramOutboundHandler extends ChannelOut
         VarintCodec.writeVarint(header, quarterStreamId);
 
         ByteBuf datagram = Unpooled.wrappedBuffer(header, payload.retain());
+        // The caller's promise belongs to the session (stream) channel; the actual write
+        // happens on the parent QUIC channel, which rejects foreign promises. Bridge the
+        // two by allocating a parent-channel promise and forwarding the result.
         try {
-            session.parentChannel().writeAndFlush(datagram, promise);
+            session.parentChannel()
+                    .writeAndFlush(datagram)
+                    .addListener(
+                            f -> {
+                                if (f.isSuccess()) {
+                                    promise.trySuccess();
+                                } else {
+                                    promise.tryFailure(f.cause());
+                                }
+                            });
         } finally {
             frame.release();
         }
